@@ -6,7 +6,7 @@
 #         (playbooks#33, merged 2026-08-16 16:14 UTC; `v1` moved onto it)
 # Taken:  2026-08-16
 #
-# THE SECOND COPY THIS FILE HAS HELD, and the first taken from the tag:
+# EVERY COPY THIS FILE HAS HELD, oldest first. Only the last is from the tag:
 #
 #   1. `bf0df4c` — playbooks#32, taken from `main` while `v1` still resolved to
 #      `a6bca1f`, whose comments named a CLIENT's repository ten times with two
@@ -22,10 +22,15 @@
 # fixed at the source in playbooks#33, arrived here as a replacement.
 #
 # WHAT COPY 1 OWED, and this discharges it: it was taken from `main` rather than
-# the tag, and said so, and said the debt was due the day `v1` moved. `v1` moved
-# at 17:0x and this is that day. The debt was written into the file rather than
-# left in somebody's memory precisely because a copy nobody compares is how the
-# sibling ended up thirteen days behind without a single check going red.
+# the tag, and said so, and said the debt was due the day `v1` moved. The tag was
+# moved onto `3786db9` at 16:59:18 UTC, forty-five minutes after playbooks#33
+# merged, and this is that day. The minute is written out rather than rounded for
+# the same reason the `Commit:` field is forty characters: a header whose job is
+# to be the record does not get to approximate.
+#
+# The debt was written into the file rather than left in somebody's memory
+# precisely because a copy nobody compares is how a vendored review goes stale
+# without a single check going red.
 #
 # THE COMMIT FIELD IS THE FULL FORTY, not a prefix. The re-vendor command below
 # resolves `?ref=v1`, a MOVING tag, so this field is the only record of which
@@ -50,9 +55,17 @@
 # `claude-sonnet-5` while another resolved to `opus[1m]`, one pinned the action's
 # SHA and the other tracked a moving tag, and nobody could see it. This copy will
 # drift the same way unless somebody compares it. It already happened to the
-# sibling: tenbytesltd/uir-public-site is vendored at `b8f231cf` and is missing
-# the `/tmp` inline-comment-buffer guard that `a6bca1f1` added — a copy taken
-# thirteen days earlier and never compared since.
+# sibling, and the record of it is worth keeping in the PAST tense: on
+# 2026-08-16 `tenbytesltd/uir-public-site` sat at `b8f231cf` for thirteen days,
+# missing the `/tmp` inline-comment-buffer guard that `a6bca1f` added, with no
+# check red about it. It has since been re-vendored twice and is now at
+# `3786db9`, the same revision as this file.
+#
+# Written as a dated fact rather than a standing one deliberately: a
+# present-tense claim about another repository's copy is a claim this file cannot
+# check, and it was already false — the sentence said the sibling lacked the
+# buffer step while a paragraph above credited that step's own `::warning::` to a
+# finding raised on the sibling's copy.
 #
 # THE RULE: every change goes to `tenbytesltd/playbooks` FIRST and is re-vendored
 # here. Never edit this file to change review behaviour.
