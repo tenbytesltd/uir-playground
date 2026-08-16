@@ -22,7 +22,8 @@ finding on its own, whatever else it does.
 figure. The figures UIR publishes about real code are measured in
 `tenbytesltd/uir`, live in that repository's `docs/MEASURED.md`, and stay
 private. A client's name, a customer's package, a screenshot of one, or a
-`/home/<user>/…` path in a document are all the same finding: a private subject
+an absolute path rooted on somebody's machine in a document — the kind that
+starts with a home or user directory — are all the same finding: a private subject
 reaching a repository that ships. It is the most serious finding available here.
 
 ## The defect class this project exists inside
@@ -133,7 +134,11 @@ Two more gaps in the build flow itself:
 - **Prose about the program, in the program's own documents, that the program
   falsifies.** `README.md:29` is the live one.
 - **A guard that does not survive its own rule.** Ask of every new guard: what
-  input makes this guard the thing that fails?
+  input makes this guard the thing that fails? The sibling repository's path
+  check failed on itself five commits running, each time because a comment
+  spelled out an example of the thing being detected. **No rule stated in this
+  file spells out an instance of what it forbids**, for the same reason: the day
+  this repository grows a scanner, the illustration is the finding.
 - **A picture is a claim.** A badge, a counter or a bar that encodes a
   proportion nobody computed is a false statement even when it looks right.
 
