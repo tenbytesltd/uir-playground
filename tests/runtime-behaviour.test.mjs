@@ -210,32 +210,40 @@ test("children are handed out frozen too, and node() hands out the same array", 
   assert.ok(Object.isFrozen(runtime.childrenByParent.get(parent)));
 });
 
-test("every array on a memoised node is frozen, not just the one that was named", () => {
+test("every array on every memoised node is frozen, leaves included", () => {
   // The argument was never about `children`. It is about `node()` being
   // memoised: whatever a caller gets is the array every other caller gets, for
   // the runtime's lifetime. `facts`, `bindings`, `sources` and `modes` are built
-  // fresh in `node()` and then stored in the same cache, so a display sort done
-  // once in one component reorders the data every other reader sees.
+  // fresh in `node()` and stored in the same cache, so a display sort done once
+  // in one component reorders the data every other reader sees.
   //
-  // Derived from the node rather than listed, so a field added to `UIRNode`
-  // tomorrow is covered without an edit here — which is the failure mode this
-  // whole sequence of findings has been: a rule applied to the field that
-  // prompted it and not to the ones beside it.
+  // **Every node, and the fields derived from the node.** The first version of
+  // this case picked one node with
+  // `.find((node) => Object.values(node).filter(Array.isArray).length >= 4)`,
+  // which reads like a selection and is a constant: all five fields are
+  // unconditionally arrays, so the predicate is true for every node, `.find`
+  // returned element 0, and the guard beneath it could not fire. It asserted
+  // `nodeIds[0]` — the root — and nothing else, which is how the empty-children
+  // path stayed uncovered. Iterating removes the question rather than answering
+  // it, and it is not slower in any way that matters: the runtime memoises.
   const runtime = new UIRRuntime(examplePackage);
-  const withArrays = runtime.nodeIds
-    .map((id) => runtime.node(id))
-    .find((node) => Object.values(node).filter(Array.isArray).length >= 4);
-  assert.ok(withArrays, "no node in the example carries enough arrays to test");
-  for (const [field, value] of Object.entries(withArrays)) {
-    if (!Array.isArray(value)) continue;
-    assert.ok(Object.isFrozen(value), `node().${field} is mutable`);
-    assert.throws(() => value.push(value[0]), TypeError, `node().${field} accepted a push`);
+  assert.ok(runtime.nodeIds.length > 5, "too few nodes for this to mean anything");
+  let leaves = 0;
+  for (const id of runtime.nodeIds) {
+    const node = runtime.node(id);
+    const arrays = Object.entries(node).filter(([, value]) => Array.isArray(value));
+    assert.equal(arrays.length, 5, `${id} carries ${arrays.length} array fields, not 5`);
+    for (const [field, value] of arrays) {
+      assert.ok(Object.isFrozen(value), `node(${id}).${field} is mutable`);
+      assert.throws(() => value.push(value[0]), TypeError, `node(${id}).${field} accepted a push`);
+      // The memo really does share them, which is what makes the freeze matter.
+      assert.equal(runtime.node(id)[field], value, `node(${id}).${field} is not shared`);
+    }
+    if (node.children.length === 0) leaves += 1;
   }
-  // And the memo really does share them, which is what makes the above matter.
-  const again = runtime.node(withArrays.id);
-  for (const [field, value] of Object.entries(withArrays)) {
-    if (Array.isArray(value)) assert.equal(again[field], value, `node().${field} is not shared`);
-  }
+  // The `?? NO_CHILDREN` branch: a leaf has no entry in `childrenByParent` at
+  // all, so it takes a different path to its array than every node above.
+  assert.ok(leaves > 0, "the example has no leaf, so the empty-children path is untested");
 });
 
 test("a diff of a package against itself invents nothing", () => {
