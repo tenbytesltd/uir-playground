@@ -2,7 +2,15 @@
 # VENDORED COPY. Do not edit below the marker.
 #
 # Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml on `main`
-# Commit: bf0df4c (PR #32, merged 2026-08-16 15:25 UTC)
+# Commit: bf0df4c64a4a0819bb0d029dad72ea8be772765a
+#         (playbooks#32, merged 2026-08-16 15:25 UTC)
+#
+# THE FULL FORTY, not a prefix. The re-vendor command below resolves `?ref=v1`,
+# a MOVING tag, so this field is the only record of which commit this copy
+# actually is — it is what a reader compares the tag against to answer whether
+# v1 has moved since. A short sha is ambiguous across a repository's lifetime
+# and a tag name is not a revision at all. Raised as P3 on the sibling public
+# repository's copy of this same header, and it applies here identically.
 # Taken:  2026-08-16
 #
 # `main`, NOT the `v1` tag, and that is deliberate rather than sloppy. `v1` still
