@@ -65,16 +65,28 @@ jobs:
     # refused, not a review that found nothing.
     secrets: inherit
     with:
-      # `ubuntu-latest`, unlike the private consumers, and this is the one line
-      # in the file that is a bet on the visibility flip rather than a fact about
-      # today. The org's hosted-runner allowance is exhausted — this repository's
-      # only CI run so far died in five seconds with zero steps executed — so
-      # until this repository is PUBLIC and hosted minutes stop being billed,
-      # this job cannot start. That is stated rather than worked around: pinning
-      # `self-hosted` would make the review run today and would put arbitrary
-      # fork-pull-request code on a box that also builds other repositories, on
-      # the very day the repository starts accepting forks.
-      runner_labels: '["ubuntu-latest"]'
+      # **DERIVED from visibility, like `ci.yml`'s runner, and for the same two
+      # reasons rather than for symmetry.**
+      #
+      # `ubuntu-latest` cannot start while this repository is private: hosted
+      # minutes are billed, the organisation's allowance is exhausted, and every
+      # run here has died in about four seconds with zero steps and the
+      # annotation *"recent account payments have failed or your spending limit
+      # needs to be increased"*. A review that cannot start is not a review.
+      #
+      # `self-hosted` cannot stay once it is public: a fork pull request is a
+      # stranger's code, and this review reads untrusted pull request content by
+      # design. The fork guard in the reviewed workflow refuses the job, but the
+      # runner choice must not depend on one `if:` being right forever.
+      #
+      # So the expression answers it, and the flip needs no edit. The one thing
+      # that made `self-hosted` unsafe for the REVIEW specifically — the action
+      # buffering inline comments at a hardcoded `/tmp` path shared with every
+      # other repository that box builds — is fixed in the copy vendored beside
+      # this file, so the private half is safe on the day it is used.
+      runner_labels: >-
+        ${{ github.event.repository.private
+            && '["self-hosted"]' || '["ubuntu-latest"]' }}
       # `full:` is deliberately NOT set. An issue_comment already means a human
       # asked, and the reviewed workflow reads the event itself — a `full:` line
       # testing `github.event_name` in every caller is exactly the duplication

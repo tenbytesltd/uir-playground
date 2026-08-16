@@ -10,7 +10,31 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # **The runner is DERIVED from visibility, not chosen once and revisited.**
+    #
+    # `ubuntu-latest` alone cannot start here. Every run on this repository has
+    # died in about four seconds with zero steps executed and one annotation:
+    # *"The job was not started because recent account payments have failed or
+    # your spending limit needs to be increased."* Hosted minutes are billed for
+    # a PRIVATE repository and the organisation's allowance is exhausted, so the
+    # check is not red about the code — it never reached the code.
+    #
+    # `self-hosted` alone is worse, and only later. It works today and becomes a
+    # hole on the day this repository is made public: a fork pull request runs
+    # arbitrary code, and on a self-hosted box that is arbitrary code on hardware
+    # other repositories build on. Writing it now and reverting it at the flip is
+    # a bet that expires silently — the same class as a `uses:` line pointing at
+    # a private reusable workflow, which resolves until the moment it does not.
+    #
+    # So neither is written down. `github.event.repository.private` is present on
+    # `pull_request` and on `push` alike, so the expression answers itself:
+    # private → the organisation's own boxes, where minutes are not billed;
+    # public → hosted, where a stranger's code belongs. The flip changes the
+    # runner with no edit, no window, and nothing to remember.
+    runs-on: >-
+      ${{ github.event.repository.private
+          && fromJSON('["self-hosted"]')
+          || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

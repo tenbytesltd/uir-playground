@@ -16,6 +16,14 @@ concurrency:
 
 jobs:
   build:
+    # Pages does not publish from a private repository on this organisation's
+    # plan, and hosted minutes are billed while it is private — so every push to
+    # the default branch would put a red deploy on a branch whose code is fine.
+    # SKIPPED rather than failed while private, and it starts working on the day
+    # visibility changes with no edit here: the same derivation `ci.yml` uses for
+    # its runner, for the same reason. A red that means "not yet" teaches readers
+    # to ignore reds.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

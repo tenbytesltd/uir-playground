@@ -16,7 +16,14 @@ function cleanArchivePath(path: string) {
 function u16(view: DataView, offset: number) { return view.getUint16(offset, true); }
 function u32(view: DataView, offset: number) { return view.getUint32(offset, true); }
 
-async function inflateRaw(bytes: Uint8Array) {
+// `Uint8Array<ArrayBuffer>` rather than a bare `Uint8Array`, which since
+// TypeScript 5.7 means `Uint8Array<ArrayBufferLike>` — a view that MIGHT be
+// backed by a `SharedArrayBuffer`, and `Blob` does not accept one. Nothing here
+// ever is: every view in this file comes from `file.arrayBuffer()`, from a
+// `subarray` of it, or from `Response.arrayBuffer()`, each of which is a plain
+// `ArrayBuffer`. The annotation states what the code already guarantees, which
+// is not the same thing as casting the guarantee away.
+async function inflateRaw(bytes: Uint8Array<ArrayBuffer>) {
   if (typeof DecompressionStream === "undefined") throw new Error("This browser cannot decompress deflated ZIP files. Open the package directory instead.");
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -69,7 +76,7 @@ async function unzip(file: File): Promise<FileWithPath[]> {
     const localExtraLength = u16(view, localOffset + 28);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
-    let data: Uint8Array;
+    let data: Uint8Array<ArrayBuffer>;
     if (method === 0) data = compressed.slice();
     else if (method === 8) data = await inflateRaw(compressed);
     else throw new Error(`ZIP compression method ${method} is not supported (${rawName}).`);
