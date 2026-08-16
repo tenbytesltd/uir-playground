@@ -55,17 +55,24 @@
 # `claude-sonnet-5` while another resolved to `opus[1m]`, one pinned the action's
 # SHA and the other tracked a moving tag, and nobody could see it. This copy will
 # drift the same way unless somebody compares it. It already happened to the
-# sibling, and the record of it is worth keeping in the PAST tense: on
-# 2026-08-16 `tenbytesltd/uir-public-site` sat at `b8f231cf` for thirteen days,
-# missing the `/tmp` inline-comment-buffer guard that `a6bca1f` added, with no
-# check red about it. It has since been re-vendored twice and is now at
-# `3786db9`, the same revision as this file.
+# sibling, and the record is one dated fact: as of 2026-08-16 morning,
+# `tenbytesltd/uir-public-site` had sat at `b8f231cf` for thirteen days, missing
+# the `/tmp` inline-comment-buffer guard that `a6bca1f` added, with no check red
+# about it.
 #
-# Written as a dated fact rather than a standing one deliberately: a
-# present-tense claim about another repository's copy is a claim this file cannot
-# check, and it was already false — the sentence said the sibling lacked the
-# buffer step while a paragraph above credited that step's own `::warning::` to a
-# finding raised on the sibling's copy.
+# WHERE THAT COPY STANDS TODAY IS NOT WRITTEN HERE, and the omission is the rule
+# rather than an oversight. A present-tense claim about another repository's copy
+# is a claim this file cannot check: this file's own revision is corrected by the
+# command below on every re-vendor, and a sentence about somebody else's is
+# corrected by nothing. The first version of this paragraph said the sibling
+# lacked the buffer step while a paragraph above credited that step's own
+# `::warning::` to a finding raised on the sibling's copy — two statements that
+# could not both be true, and the standing one was the stale one. The replacement
+# then added `is now at 3786db9`, which is the same sentence with a fresher
+# value, two lines above the rule forbidding it.
+#
+# To find out, run the command below against the other repository. That answers
+# it in one line and cannot go stale sitting here.
 #
 # THE RULE: every change goes to `tenbytesltd/playbooks` FIRST and is re-vendored
 # here. Never edit this file to change review behaviour.
