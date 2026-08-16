@@ -239,11 +239,18 @@ test("every array on every memoised node is frozen, leaves included", () => {
       // The memo really does share them, which is what makes the freeze matter.
       assert.equal(runtime.node(id)[field], value, `node(${id}).${field} is not shared`);
     }
-    if (node.children.length === 0) leaves += 1;
+    // **The BRANCH, not a consequence of it.** `?? NO_CHILDREN` is taken when
+    // `childrenByParent` has no entry for the node — that absence is what the
+    // case exists to cover. Counting `children.length === 0` counts a symptom
+    // that coincides with it only because the map is built by pushing, so an
+    // entry never exists empty. Rebuild it any other way — seed every node with
+    // `[]`, or build it with `groupBy` — and every node has an entry, the
+    // `?? NO_CHILDREN` arm becomes dead code, and this counter stays happily
+    // above zero while covering nothing.
+    if (!runtime.childrenByParent.has(id)) leaves += 1;
   }
-  // The `?? NO_CHILDREN` branch: a leaf has no entry in `childrenByParent` at
-  // all, so it takes a different path to its array than every node above.
-  assert.ok(leaves > 0, "the example has no leaf, so the empty-children path is untested");
+  assert.ok(leaves > 0,
+    "no node reaches `?? NO_CHILDREN`, so that arm is covered by nothing here");
 });
 
 test("a diff of a package against itself invents nothing", () => {
