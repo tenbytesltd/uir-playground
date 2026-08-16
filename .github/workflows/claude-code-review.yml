@@ -1,0 +1,84 @@
+name: Claude Code Review
+
+# The caller. The review itself is the VENDORED copy of tenbytesltd/playbooks@v1
+# in claude-review.yml — read its header before changing anything about how the
+# review behaves. What this file decides is only what is genuinely local: which
+# runner, and where the standards live.
+#
+# A WORKFLOW OF ITS OWN, and not a job inside `ci.yml`. The reason is measured
+# rather than stylistic: in the sibling repositories the first attempt DID put it
+# there, the call could not resolve, and the run failed at the workflow level
+# with ZERO check-runs — so the GATE did not execute and the pull request read as
+# merely red rather than unverified. A review that cannot run must not be able to
+# stop the thing that verifies the code.
+#
+# It also has to be its own file for the review to work at all on a large pull
+# request: the action refuses to run whenever a pull request's review WORKFLOW
+# differs from the default branch's copy, so the file carrying the review must be
+# identical on both. A review job inside `ci.yml` could never satisfy that on a
+# branch that also touches `ci.yml`.
+#
+# Both triggers are here because they answer different questions:
+#  - `pull_request` is the automatic review of each ready pull request.
+#  - `issue_comment` carrying `@claude-review` asks for a full re-read, and is
+#    also the only path that can review a pull request which edits the review
+#    itself: a comment event runs the DEFAULT BRANCH's workflow, so it is never
+#    the mismatched one. On THIS repository that matters immediately — the pull
+#    request introducing the review is itself a pull request that edits it.
+on:
+  pull_request:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    # `@claude-review`, with the hyphen, and the hyphen is not cosmetic: the
+    # action matches its trigger as a word boundary, `(^|\s)@claude([\s.,!?;:]|$)`,
+    # so `@claude-review` does not also wake a general-purpose `@claude`
+    # assistant while `@claude review` (a space) would. Do not tidy it away.
+    #
+    # The draft, dependabot and fork guards are NOT repeated here. They live in
+    # the reviewed workflow deliberately, so that a caller cannot forget one —
+    # which will matter here the day this repository goes public and can receive
+    # a fork pull request for the first time.
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude-review'))
+    uses: ./.github/workflows/claude-review.yml
+    # REQUIRED here rather than there: a called workflow can only NARROW
+    # GITHUB_TOKEN, never widen it, so these are what let the review post.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    # Forwards this repository's own CLAUDE_CODE_OAUTH_TOKEN. Org secrets do not
+    # reach private repositories on the org's Free plan, so it is a repo secret,
+    # and it has to be SET here — `secrets: inherit` forwards a secret that does
+    # not exist as an empty string, and the action reports a refused key exactly
+    # as it reports a failed review. The tell is in the `result` object in the
+    # job log: one turn at zero cost in about two seconds is a key that was
+    # refused, not a review that found nothing.
+    secrets: inherit
+    with:
+      # HOSTED, unconditionally, exactly as in `ci.yml` and for a reason this
+      # workflow makes sharper: **the review reads untrusted pull request content
+      # by design.** That is its job. Pointing a job with that property at a
+      # shared self-hosted box is the one runner choice that must not be
+      # reachable, and "reachable only when the repository is private" is still
+      # reachable — the fork guard in the reviewed workflow is what makes it safe,
+      # and a runner choice must not rest on one `if:` staying right forever.
+      #
+      # The cost is the same one `ci.yml` states: while this repository is private
+      # this job cannot start, because hosted minutes are billed and the
+      # organisation's allowance is exhausted. A review that cannot start is not a
+      # review, and that is what the visibility flip buys.
+      runner_labels: '["ubuntu-latest"]'
+      # `full:` is deliberately NOT set. An issue_comment already means a human
+      # asked, and the reviewed workflow reads the event itself — a `full:` line
+      # testing `github.event_name` in every caller is exactly the duplication
+      # the shared workflow exists to remove. Its own documentation says so.
