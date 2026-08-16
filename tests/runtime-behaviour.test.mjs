@@ -241,12 +241,24 @@ test("every array on every memoised node is frozen, leaves included", () => {
     }
     // **The BRANCH, not a consequence of it.** `?? NO_CHILDREN` is taken when
     // `childrenByParent` has no entry for the node — that absence is what the
-    // case exists to cover. Counting `children.length === 0` counts a symptom
+    // case exists to cover. Counting `children.length === 0` counted a symptom
     // that coincides with it only because the map is built by pushing, so an
-    // entry never exists empty. Rebuild it any other way — seed every node with
-    // `[]`, or build it with `groupBy` — and every node has an entry, the
-    // `?? NO_CHILDREN` arm becomes dead code, and this counter stays happily
-    // above zero while covering nothing.
+    // entry never exists empty.
+    //
+    // The refactor that separates them is seeding: add
+    // `for (const id of this.nodeIds) this.childrenByParent.set(id, [])` and
+    // every node has an entry, `?? NO_CHILDREN` becomes dead code, and a counter
+    // reading `children.length === 0` stays happily above zero while covering
+    // nothing. Measured — it turns this case red now and left it green before.
+    //
+    // An earlier version of this comment also offered `Map.groupBy` as such a
+    // refactor. It is not one, and the difference is worth keeping: `groupBy`
+    // creates a key per distinct callback result among the items it is GIVEN, so
+    // a node that is nobody's parent appears in no relation, gets no key, and
+    // still takes the `??`. Naming an example that does the opposite of what the
+    // sentence claims is the same defect this case is about, one level out — a
+    // statement about the code that the code does not support, and the one of
+    // the two that had not been run.
     if (!runtime.childrenByParent.has(id)) leaves += 1;
   }
   assert.ok(leaves > 0,
