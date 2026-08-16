@@ -150,10 +150,12 @@ export function Playground({ pkg }: { pkg: UIRPackageData }) {
   const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const selectNode = (id: string) => {
     setSelectedId(id);
-    // The same guard upward. `parentByNode` is built from the same unvalidated
-    // relations, so a cycle made this `while` spin forever — a hang rather than
-    // a stack overflow, which is the worse of the two because nothing reports it.
-    setExpanded((current) => { const next = new Set(current); let parent = runtime.parentByNode.get(id); while (parent && !next.has(parent)) { next.add(parent); parent = runtime.parentByNode.get(parent); } return next; });
+    // `ancestorsOf` rather than a walk written here: inline, the walk was
+    // reachable by no test, and it was wrong in a way reading did not catch —
+    // it terminated on `expanded`, which conflates *already open* with *already
+    // walked on this ascent*, so an ascent that met an open ancestor stopped
+    // there and left the rest of the chain collapsed.
+    setExpanded((current) => new Set([...current, ...runtime.ancestorsOf(id)]));
   };
   const viewportLabel = viewport === "desktop" ? "responsive desktop" : viewport === "tablet" ? "768 px" : "390 px";
 

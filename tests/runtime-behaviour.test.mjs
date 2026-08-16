@@ -124,3 +124,69 @@ test("fact() returns the FIRST match, as the scan it replaced did", () => {
   assert.notEqual(runtime.role("example:node:title"), "paragraph",
     "the duplicate overrode the original role");
 });
+
+test("the index arrays are handed out frozen, not lent out mutable", () => {
+  // `factsOf(subject)` with no kind returns the index itself now; the `.filter()`
+  // it replaced allocated a fresh array. Nothing mutates one today, but `node()`
+  // sorts a `.map()` of it and the copy in that expression is incidental. Drop
+  // the `.map` in a display tweak and the index is reordered in place for every
+  // reader, including `fact()` — whose first-match-wins the case above pins, and
+  // which would then fail for a reason nobody would look for.
+  const runtime = new UIRRuntime(examplePackage);
+  const facts = runtime.factsOf(runtime.nodeIds[0]);
+  assert.ok(facts.length, "the fixture node has no facts");
+  assert.ok(Object.isFrozen(facts), "factsOf handed out a mutable index array");
+  // `push`, not `sort`: sorting a one-element array is a no-op even when the
+  // array is frozen, so the first version of this assertion passed on an array
+  // it never tried to write to. The oracle has to attempt the mutation.
+  assert.throws(() => facts.push(facts[0]), TypeError);
+  assert.throws(() => { facts[0] = null; }, TypeError);
+  assert.ok(Object.isFrozen(runtime.relationsOf(runtime.nodeIds[0])));
+  // Passing a kind still gives a fresh array, which is what a caller that wants
+  // to sort should reach for.
+  const kinded = runtime.factsOf(runtime.nodeIds[0], facts[0].kind);
+  assert.ok(!Object.isFrozen(kinded));
+});
+
+test("an ascent returns the whole chain, whatever is already expanded", () => {
+  // The walk used to live inside `selectNode` and terminate on the user's
+  // expanded set. Repro without any malformed package: open the root, select a
+  // deep node so its ancestors are added, collapse the root by hand, then select
+  // a different node under an ancestor that is still open. The loop exited on
+  // its first test, the root never reopened, and the structure panel showed
+  // nothing while the canvas showed the node selected.
+  //
+  // **The expected chain is rebuilt here from `parentByNode`, not read out of
+  // `ancestorsOf`.** The first version of this case picked its fixture with
+  // `nodeIds.find(id => runtime.ancestorsOf(id).length >= 2)` — the oracle
+  // choosing its subject with the function under test — and a mutation that
+  // truncated every ascent went green, because the fixture search truncated with
+  // it. Measured, not suspected.
+  const runtime = new UIRRuntime(examplePackage);
+  const expected = (id) => {
+    const chain = [];
+    for (let parent = runtime.parentByNode.get(id); parent; parent = runtime.parentByNode.get(parent)) {
+      if (chain.includes(parent)) break;
+      chain.push(parent);
+    }
+    return chain;
+  };
+  const deep = runtime.nodeIds.find((id) => expected(id).length >= 2);
+  assert.ok(deep, "the example has no node two levels down");
+  assert.deepEqual(runtime.ancestorsOf(deep), expected(deep));
+  for (const id of runtime.nodeIds) {
+    assert.deepEqual(runtime.ancestorsOf(id), expected(id), `ascent from ${id}`);
+  }
+});
+
+test("an ascent through a cycle terminates", () => {
+  const runtime = new UIRRuntime(withRecords([{
+    id: "example:rel:cycle", recordType: "Relation", kind: "contains",
+    source: "example:node:item-1", target: "example:node:proof-list", order: 13,
+  }]));
+  for (const id of runtime.nodeIds) {
+    const chain = runtime.ancestorsOf(id);
+    assert.ok(chain.length <= runtime.nodeIds.length, `ascent from ${id} did not terminate`);
+    assert.equal(new Set(chain).size, chain.length, `ascent from ${id} repeated an ancestor`);
+  }
+});

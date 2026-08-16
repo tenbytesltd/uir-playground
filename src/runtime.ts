@@ -82,6 +82,8 @@ function nodeKey(subject: string) {
   return subject.split(":").at(-1) ?? subject;
 }
 
+const EMPTY: readonly UIRRecord[] = Object.freeze([]);
+
 function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
@@ -222,6 +224,24 @@ export class UIRRuntime {
       }
     }
 
+    // **Frozen, because these arrays are now HANDED OUT.** `factsOf(subject)`
+    // with no kind returns the index array itself and `relationsOf` likewise;
+    // the `.filter()` calls they replaced allocated a fresh array every time, so
+    // a caller could do what it liked with the result. Nothing mutates one today
+    // — every call site spreads, maps or stringifies — but the invitation is
+    // there: `node()` sorts `nodeFacts.map(...)`, and the copy in that
+    // expression is the `.map`, not anything deliberate. Drop it in a later edit
+    // and the index is reordered in place for every other reader, including
+    // `fact()`, whose first-match-wins is exactly what one of the tests pins.
+    // That test would go red for a reason nobody would look for in a display
+    // tweak, and only when the reordering happened to move the first record.
+    //
+    // Frozen rather than copied on every call: the borrow is the point, and a
+    // mutation now throws at the line that attempts it instead of surfacing
+    // somewhere else later.
+    for (const list of this.factsBySubject.values()) Object.freeze(list);
+    for (const list of this.relationsBySubject.values()) Object.freeze(list);
+
     this.cyclicNodeIds = this.findCycles();
   }
 
@@ -281,13 +301,16 @@ export class UIRRuntime {
     return this.factBySubjectKind.get(`${subject}\u0000${kind}`);
   }
 
-  factsOf(subject: string, kind?: string) {
-    const all = this.factsBySubject.get(subject) ?? [];
+  /** The subject's facts. The un-kinded result is the index itself and is
+   *  frozen; pass a kind, or copy, if you need to sort or splice. */
+  factsOf(subject: string, kind?: string): readonly UIRRecord[] {
+    const all = this.factsBySubject.get(subject) ?? EMPTY;
     return kind ? all.filter((record) => record.kind === kind) : all;
   }
 
-  relationsOf(subject: string) {
-    return this.relationsBySubject.get(subject) ?? [];
+  /** The relations touching this subject. Frozen, for the reason above. */
+  relationsOf(subject: string): readonly UIRRecord[] {
+    return this.relationsBySubject.get(subject) ?? EMPTY;
   }
 
   textValue(subject: string) {
@@ -482,6 +505,33 @@ export class UIRRuntime {
     };
     this.nodeCache.set(subject, built);
     return built;
+  }
+
+  /** Every ancestor of `subject`, nearest first, stopping at a repeat.
+   *
+   * Lives here rather than inline in the component for one reason: inline, it
+   * was reachable by no test. There is no DOM environment, so a walk written
+   * inside `selectNode` can only be read, and this one was wrong in a way
+   * reading did not catch — it terminated on the user's EXPANDED set, which
+   * conflates *already open* with *already walked on this ascent*, so an ascent
+   * that met an open ancestor stopped there and left the rest of the chain
+   * collapsed. The termination condition belongs to the walk, not to the UI
+   * state it happens to be filling in.
+   *
+   * `parentByNode` comes from unvalidated `contains` relations, so a cycle would
+   * otherwise spin this forever — a hang, which is worse than a crash because
+   * nothing reports it.
+   */
+  ancestorsOf(subject: string): string[] {
+    const chain: string[] = [];
+    const walked = new Set<string>([subject]);
+    let parent = this.parentByNode.get(subject);
+    while (parent && !walked.has(parent)) {
+      walked.add(parent);
+      chain.push(parent);
+      parent = this.parentByNode.get(parent);
+    }
+    return chain;
   }
 
   allNodes() {

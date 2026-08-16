@@ -126,7 +126,22 @@ export async function loadPackageFromFiles(files: FileWithPath[]): Promise<UIRPa
     if (entry.sha256) {
       const actual = await sha256(fileItem.file);
       if (!actual) {
-        diagnostics.push({ severity: "warning", code: "hash.unavailable", message: `SHA-256 could not be verified for ${entry.collection}; the shard is not loaded.`, path: entry.path });
+        // **Name the ORIGIN, because the package is not where the answer is.**
+        // `crypto.subtle` is absent on any page that is not a secure context —
+        // not an exotic browser, but plain `http://` on anything other than
+        // `localhost`. This tool ships desktop/tablet/phone canvas widths, so
+        // checking the phone width on a real phone means `npm run dev -- --host`
+        // and opening `http://192.168.x.x:5173` from the device. Every shard
+        // that declares a `sha256` — the well-formed packages, the ones doing
+        // the right thing — then fails here, `shards` stays empty and the canvas
+        // reads "No renderable tree". It fails loudly, which is right; a message
+        // that sends the reader to inspect the package would send them to the
+        // wrong place.
+        diagnostics.push({
+          severity: "warning", code: "hash.unavailable",
+          message: `Web Crypto is unavailable on this origin, so the SHA-256 of ${entry.collection} cannot be checked and the shard is not loaded. This is the page's origin, not the package: crypto.subtle exists only in a secure context — https, or localhost. Open this tool over https or on localhost.`,
+          path: entry.path,
+        });
         continue;
       }
       if (actual !== entry.sha256.toLowerCase()) {
