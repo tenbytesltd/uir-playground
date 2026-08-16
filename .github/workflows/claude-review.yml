@@ -71,8 +71,18 @@
 # then added `is now at 3786db9`, which is the same sentence with a fresher
 # value, two lines above the rule forbidding it.
 #
-# To find out, run the command below against the other repository. That answers
-# it in one line and cannot go stale sitting here.
+# To find out, read that copy's own `Commit:` field, which is the same record for
+# it that this field is for this file:
+#
+#   gh api "repos/<owner>/<repo>/contents/.github/workflows/claude-review.yml" \
+#     --jq .content | base64 -d | sed -n '/^# Commit:/{p;q;}'
+#
+# NOT the re-vendor recipe further down. That answers a different question — it
+# diffs a BODY against upstream and reports drift, not which revision a copy
+# records itself as — and its second stage reads a relative path in the current
+# checkout, so aiming it at another repository reads this file instead and prints
+# an empty diff about the wrong thing. Two commands, two questions, and the one
+# that fits is the shorter one.
 #
 # THE RULE: every change goes to `tenbytesltd/playbooks` FIRST and is re-vendored
 # here. Never edit this file to change review behaviour.
