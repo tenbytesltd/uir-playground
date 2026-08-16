@@ -65,28 +65,19 @@ jobs:
     # refused, not a review that found nothing.
     secrets: inherit
     with:
-      # **DERIVED from visibility, like `ci.yml`'s runner, and for the same two
-      # reasons rather than for symmetry.**
+      # HOSTED, unconditionally, exactly as in `ci.yml` and for a reason this
+      # workflow makes sharper: **the review reads untrusted pull request content
+      # by design.** That is its job. Pointing a job with that property at a
+      # shared self-hosted box is the one runner choice that must not be
+      # reachable, and "reachable only when the repository is private" is still
+      # reachable — the fork guard in the reviewed workflow is what makes it safe,
+      # and a runner choice must not rest on one `if:` staying right forever.
       #
-      # `ubuntu-latest` cannot start while this repository is private: hosted
-      # minutes are billed, the organisation's allowance is exhausted, and every
-      # run here has died in about four seconds with zero steps and the
-      # annotation *"recent account payments have failed or your spending limit
-      # needs to be increased"*. A review that cannot start is not a review.
-      #
-      # `self-hosted` cannot stay once it is public: a fork pull request is a
-      # stranger's code, and this review reads untrusted pull request content by
-      # design. The fork guard in the reviewed workflow refuses the job, but the
-      # runner choice must not depend on one `if:` being right forever.
-      #
-      # So the expression answers it, and the flip needs no edit. The one thing
-      # that made `self-hosted` unsafe for the REVIEW specifically — the action
-      # buffering inline comments at a hardcoded `/tmp` path shared with every
-      # other repository that box builds — is fixed in the copy vendored beside
-      # this file, so the private half is safe on the day it is used.
-      runner_labels: >-
-        ${{ github.event.repository.private
-            && '["self-hosted"]' || '["ubuntu-latest"]' }}
+      # The cost is the same one `ci.yml` states: while this repository is private
+      # this job cannot start, because hosted minutes are billed and the
+      # organisation's allowance is exhausted. A review that cannot start is not a
+      # review, and that is what the visibility flip buys.
+      runner_labels: '["ubuntu-latest"]'
       # `full:` is deliberately NOT set. An issue_comment already means a human
       # asked, and the reviewed workflow reads the event itself — a `full:` line
       # testing `github.event_name` in every caller is exactly the duplication

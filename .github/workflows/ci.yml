@@ -10,31 +10,32 @@ permissions:
 
 jobs:
   verify:
-    # **The runner is DERIVED from visibility, not chosen once and revisited.**
+    # **HOSTED, unconditionally, and this repository never runs on the
+    # organisation's own boxes.**
     #
-    # `ubuntu-latest` alone cannot start here. Every run on this repository has
-    # died in about four seconds with zero steps executed and one annotation:
-    # *"The job was not started because recent account payments have failed or
-    # your spending limit needs to be increased."* Hosted minutes are billed for
-    # a PRIVATE repository and the organisation's allowance is exhausted, so the
-    # check is not red about the code — it never reached the code.
+    # The previous revision derived the runner from `github.event.repository.private`
+    # so the job could start today, on `self-hosted`, and move itself to hosted at
+    # the visibility flip. It worked — a green run is on record — and it is still
+    # the wrong shape for THIS repository, because what it optimised for was the
+    # window before the flip and what it cost was a rule that has to hold after
+    # it.
     #
-    # `self-hosted` alone is worse, and only later. It works today and becomes a
-    # hole on the day this repository is made public: a fork pull request runs
-    # arbitrary code, and on a self-hosted box that is arbitrary code on hardware
-    # other repositories build on. Writing it now and reverting it at the flip is
-    # a bet that expires silently — the same class as a `uses:` line pointing at
-    # a private reusable workflow, which resolves until the moment it does not.
+    # This is a public developer TOOL that opens strangers' packages. It will take
+    # fork pull requests, `npm install` executes install scripts from whatever
+    # resolved that day, and there is no lockfile pinning them. A runner selection
+    # that CAN name `self-hosted` puts that one expression between a stranger's
+    # code and hardware other repositories build on — and an expression is a thing
+    # somebody edits. One label, always hosted, is a rule a reader can check in a
+    # second and nobody can widen by accident.
     #
-    # So neither is written down. `github.event.repository.private` is present on
-    # `pull_request` and on `push` alike, so the expression answers itself:
-    # private → the organisation's own boxes, where minutes are not billed;
-    # public → hosted, where a stranger's code belongs. The flip changes the
-    # runner with no edit, no window, and nothing to remember.
-    runs-on: >-
-      ${{ github.event.repository.private
-          && fromJSON('["self-hosted"]')
-          || fromJSON('["ubuntu-latest"]') }}
+    # WHAT IT COSTS, said rather than discovered: while this repository is
+    # PRIVATE this job cannot start at all. Hosted minutes are billed for private
+    # repositories, the organisation's allowance is exhausted, and the run dies in
+    # about four seconds with zero steps and one annotation — *"recent account
+    # payments have failed or your spending limit needs to be increased"*. That
+    # red means "not yet paid for", not "the code is broken". It clears when the
+    # repository is made public, which is the plan this file was written for.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

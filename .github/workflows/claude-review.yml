@@ -1,23 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # VENDORED COPY. Do not edit below the marker.
 #
-# Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml
-# Commit: 9cdc0c5 (branch `ci/the-shared-review-names-no-consumer`, PR #32)
+# Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml on `main`
+# Commit: bf0df4c (PR #32, merged 2026-08-16 15:25 UTC)
 # Taken:  2026-08-16
 #
-# NOT `v1`, and that is deliberate rather than sloppy. `v1` currently resolves to
-# `a6bca1f`, whose comments name a CLIENT's repository ten times, with two of its
-# pull request numbers and a `file:line` from it. Vendoring that into a
-# repository about to be made public would publish a private subject — which is
-# not hypothetical: the sibling `tenbytesltd/uir-public-site` did exactly this on
-# 2026-08-16 at 07:38 UTC and the name has been on the open internet since. PR #32
-# is the fix at the source, and this copy is taken from it rather than from the
-# tag that still carries the disclosure.
+# `main`, NOT the `v1` tag, and that is deliberate rather than sloppy. `v1` still
+# resolves to `a6bca1f`, whose comments name a CLIENT's repository ten times,
+# with two of its pull request numbers and a `file:line` from it. Vendoring the
+# tag into a repository about to be made public would publish a private subject
+# — which is not hypothetical: the sibling `tenbytesltd/uir-public-site` did
+# exactly that on 2026-08-16 at 07:38 UTC and the name has been on the open
+# internet since. PR #32 is the fix at the source; it is merged, and the tag has
+# not been moved onto it yet.
 #
-# WHAT THIS OWES: once #32 merges and `v1` moves to it, re-vendor against the tag
-# with the recipe below. An empty diff then is the proof this copy and the shared
-# review converged; a non-empty one is the drift, and it is owed on the day the
-# tag moves rather than whenever somebody remembers.
+# WHAT THIS OWES: the day `v1` moves, re-vendor against the tag with the recipe
+# below. An empty diff then is the proof this copy and the shared review
+# converged; a non-empty one is the drift, named. It is owed on that day rather
+# than whenever somebody remembers, because a copy nobody compares is exactly how
+# the sibling ended up thirteen days behind without a single check going red.
 #
 # WHY a copy, when the whole point of that file is that the review lives ONCE:
 # this repository is being made PUBLIC, and `playbooks` is PRIVATE. A public
