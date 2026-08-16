@@ -210,6 +210,34 @@ test("children are handed out frozen too, and node() hands out the same array", 
   assert.ok(Object.isFrozen(runtime.childrenByParent.get(parent)));
 });
 
+test("every array on a memoised node is frozen, not just the one that was named", () => {
+  // The argument was never about `children`. It is about `node()` being
+  // memoised: whatever a caller gets is the array every other caller gets, for
+  // the runtime's lifetime. `facts`, `bindings`, `sources` and `modes` are built
+  // fresh in `node()` and then stored in the same cache, so a display sort done
+  // once in one component reorders the data every other reader sees.
+  //
+  // Derived from the node rather than listed, so a field added to `UIRNode`
+  // tomorrow is covered without an edit here — which is the failure mode this
+  // whole sequence of findings has been: a rule applied to the field that
+  // prompted it and not to the ones beside it.
+  const runtime = new UIRRuntime(examplePackage);
+  const withArrays = runtime.nodeIds
+    .map((id) => runtime.node(id))
+    .find((node) => Object.values(node).filter(Array.isArray).length >= 4);
+  assert.ok(withArrays, "no node in the example carries enough arrays to test");
+  for (const [field, value] of Object.entries(withArrays)) {
+    if (!Array.isArray(value)) continue;
+    assert.ok(Object.isFrozen(value), `node().${field} is mutable`);
+    assert.throws(() => value.push(value[0]), TypeError, `node().${field} accepted a push`);
+  }
+  // And the memo really does share them, which is what makes the above matter.
+  const again = runtime.node(withArrays.id);
+  for (const [field, value] of Object.entries(withArrays)) {
+    if (Array.isArray(value)) assert.equal(again[field], value, `node().${field} is not shared`);
+  }
+});
+
 test("a diff of a package against itself invents nothing", () => {
   // The consequence the freeze protects, asserted directly rather than trusted:
   // if anything reorders a children array in place, the child signature changes

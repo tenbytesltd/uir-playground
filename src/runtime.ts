@@ -64,20 +64,30 @@ export type UIRNode = {
   salience: string;
   content: string;
   parent?: string;
-  // `readonly`, so a mutation is a compile error rather than a runtime one. The
-  // declared type is what invited the write: `factsOf` returning
-  // `readonly UIRRecord[]` makes `.sort()` fail to build, while `children:
-  // string[]` accepted it and the freeze only caught it at runtime.
+  // **Every array on this type is `readonly`, and the reason is one property of
+  // the object rather than one of its fields: `node()` is MEMOISED.** Whatever a
+  // caller gets is the array every other caller gets, for the runtime's
+  // lifetime — so a sort done once, for display, in one component, reorders the
+  // data every other reader sees.
+  //
+  // The declared type is what invites the write. `.sort()` on a `string[]` is
+  // ordinary code that compiles; on a `readonly string[]` it is a build error,
+  // at the line that attempts it, before anything runs. The freeze underneath is
+  // the second line of defence, not the first.
+  //
+  // `children` was made readonly one round before the other four, which is why
+  // this note is here and not spread across them: the argument was never about
+  // children.
   children: readonly string[];
   controls?: string;
   href?: string;
   gap?: string;
   piece?: string;
   pieceName: string;
-  facts: { kind: string; plane: string }[];
-  bindings: InspectionBinding[];
-  sources: string[];
-  modes: string[];
+  facts: readonly { kind: string; plane: string }[];
+  bindings: readonly InspectionBinding[];
+  sources: readonly string[];
+  modes: readonly string[];
 };
 
 type ScalarStyle = Record<string, string | number | undefined>;
@@ -515,10 +525,14 @@ export class UIRRuntime {
       gap: gap?.rationale,
       piece,
       pieceName: typeof pieceIdentity?.name === "string" ? pieceIdentity.name : piece ? nodeKey(piece) : "unresolved",
-      facts: nodeFacts.map((record) => ({ kind: record.kind ?? "Fact", plane: record.plane ?? "unclassified" })).sort((a, b) => a.kind.localeCompare(b.kind)),
-      bindings: this.inspectionBindings(subject, piece),
-      sources: provenance.sources,
-      modes: provenance.modes,
+      // Frozen at the point of construction, all five, because the freeze and
+      // the `readonly` answer different questions: the type stops the write
+      // being written, the freeze stops one that reaches JavaScript anyway —
+      // from a `.js` consumer, or through an `as` that discards the type.
+      facts: Object.freeze(nodeFacts.map((record) => ({ kind: record.kind ?? "Fact", plane: record.plane ?? "unclassified" })).sort((a, b) => a.kind.localeCompare(b.kind))),
+      bindings: Object.freeze(this.inspectionBindings(subject, piece)),
+      sources: Object.freeze(provenance.sources),
+      modes: Object.freeze(provenance.modes),
     };
     this.nodeCache.set(subject, built);
     return built;
