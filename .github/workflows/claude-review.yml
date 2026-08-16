@@ -1,0 +1,734 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# VENDORED COPY. Do not edit below the marker.
+#
+# Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml on `main`
+# Commit: bf0df4c64a4a0819bb0d029dad72ea8be772765a
+#         (playbooks#32, merged 2026-08-16 15:25 UTC)
+#
+# THE FULL FORTY, not a prefix. The re-vendor command below resolves `?ref=v1`,
+# a MOVING tag, so this field is the only record of which commit this copy
+# actually is — it is what a reader compares the tag against to answer whether
+# v1 has moved since. A short sha is ambiguous across a repository's lifetime
+# and a tag name is not a revision at all. Raised as P3 on the sibling public
+# repository's copy of this same header, and it applies here identically.
+# Taken:  2026-08-16
+#
+# `main`, NOT the `v1` tag, and that is deliberate rather than sloppy. `v1` still
+# resolves to `a6bca1f`, whose comments name a CLIENT's repository ten times,
+# with two of its pull request numbers and a `file:line` from it. Vendoring the
+# tag into a repository about to be made public would publish a private subject
+# — which is not hypothetical: the sibling `tenbytesltd/uir-public-site` did
+# exactly that on 2026-08-16 at 07:38 UTC and the name has been on the open
+# internet since. PR #32 is the fix at the source; it is merged, and the tag has
+# not been moved onto it yet.
+#
+# WHAT THIS OWES: the day `v1` moves, re-vendor against the tag with the recipe
+# below. An empty diff then is the proof this copy and the shared review
+# converged; a non-empty one is the drift, named. It is owed on that day rather
+# than whenever somebody remembers, because a copy nobody compares is exactly how
+# the sibling ended up thirteen days behind without a single check going red.
+#
+# WHY a copy, when the whole point of that file is that the review lives ONCE:
+# this repository is being made PUBLIC, and `playbooks` is PRIVATE. A public
+# repository cannot call a private reusable workflow — that is the callee's
+# VISIBILITY, not an `access_level` setting, so no permission change reaches it.
+#
+# Vendored NOW rather than after the flip, deliberately. A `uses:` line pointing
+# at playbooks resolves today, while this repository is still private, and stops
+# resolving the moment somebody clicks "Change visibility" — with no edit, no
+# diff and no failing check to attribute it to. The review would simply stop.
+# Taking the copy before the flip means visibility day changes nothing.
+#
+# WHAT THIS COSTS, stated because it is the exact harm the consolidation removed:
+# two copies of a review drifted invisibly once before — one repo reviewed on
+# `claude-sonnet-5` while another resolved to `opus[1m]`, one pinned the action's
+# SHA and the other tracked a moving tag, and nobody could see it. This copy will
+# drift the same way unless somebody compares it. It already happened to the
+# sibling: tenbytesltd/uir-public-site is vendored at `b8f231cf` and is missing
+# the `/tmp` inline-comment-buffer guard that `a6bca1f1` added — a copy taken
+# thirteen days earlier and never compared since.
+#
+# THE RULE: every change goes to `tenbytesltd/playbooks` FIRST and is re-vendored
+# here. Never edit this file to change review behaviour.
+#
+# HOW TO RE-VENDOR, and why the body is byte-identical: everything below the
+# marker is the upstream file unmodified, so re-vendoring is a replacement and
+# drift is a diff rather than a judgement.
+#
+#   gh api "repos/tenbytesltd/playbooks/contents/.github/workflows/claude-review.yml?ref=v1" \
+#     --jq .content | base64 -d > /tmp/upstream.yml
+#   sed -n '/^# ── END VENDOR HEADER/,$p' .github/workflows/claude-review.yml \
+#     | tail -n +2 | diff -u - /tmp/upstream.yml
+#
+# An empty diff means this copy is the shared review. Anything else is the drift,
+# named.
+# ── END VENDOR HEADER ────────────────────────────────────────────────────────
+name: Claude review (reusable)
+
+# ONE Claude PR review, shared by every TenBytes repo.
+#
+# THIS FILE NAMES NO CONSUMER, and that is a rule rather than a style. `playbooks`
+# is private and could name whoever it likes — but a PUBLIC repository cannot call
+# a private reusable workflow, so every public consumer VENDORS this file
+# byte-for-byte. Whatever is written here is therefore published, and the first
+# repository to vendor it put a client's repository name on the open internet ten
+# times over, in a repository whose own release guard was written to prevent
+# exactly that and did not scan `.github/`.
+#
+# So: the two long-standing consumers are **consumer A** (self-hosted runner with
+# no `gh`) and **consumer B**. `A#288` means pull request 288 in consumer A. Run
+# IDs, costs, turn counts and file counts stay — they are the evidence, and none
+# of them is attributable on its own. Only the identity goes. A new consumer gets
+# the next letter; it does not get its name.
+#
+# WHY this exists: the review lived twice, in two consumer repositories, and the
+# two drifted in ways nobody could see. Neither stated a model,
+# so one repo silently reviewed on `claude-sonnet-5` while the other resolved to
+# `opus[1m]`; one pinned the action's commit SHA and the other tracked a moving
+# `@v1` tag; one deduped by narrowing scope and the other by re-reading its own
+# comments. Every one of those was a decision made in one place and forgotten in
+# the other. Now there is one place.
+#
+# A caller supplies only what is genuinely repo-specific — its runner labels and
+# the standards its own codebase cares about — and inherits the rest:
+#
+#   jobs:
+#     review:
+#       uses: tenbytesltd/playbooks/.github/workflows/claude-review.yml@v1
+#       permissions:            # REQUIRED in the caller: a called workflow can
+#         contents: read        # only narrow GITHUB_TOKEN, never widen it, so
+#         pull-requests: write  # declaring these here is what lets the review
+#         issues: write         # post at all.
+#         id-token: write
+#       secrets: inherit        # forwards the caller's CLAUDE_CODE_OAUTH_TOKEN
+#       with:
+#         runner_labels: '["self-hosted","perf-runner"]'
+#
+# A repo's review standards go in a FILE (.github/claude-review-focus.md), not in
+# this workflow — see the focus_file input for why.
+#
+# On secrets: the Claude GitHub App is installed org-wide, but the credential is
+# a REPOSITORY secret (`CLAUDE_CODE_OAUTH_TOKEN`) because org secrets do not
+# reach private repos on the org's Free plan. `secrets: inherit` forwards the
+# caller's own copy, so this workflow needs no secret of its own. The day the org
+# moves to Team, one org secret replaces the per-repo copies with no edit here.
+
+on:
+  workflow_call:
+    inputs:
+      focus_file:
+        description: >-
+          Path to the repo's review standards — what this codebase cares about
+          and, more useful, what its own gate is known to be blind to.
+
+          A FILE rather than an input, because the input lived in the caller
+          workflow and that made every tuning of the review blind its own PR:
+          the action refuses to run whenever a PR's review workflow differs from
+          the default branch's copy, so editing `focus` there produced a green
+          check that reviewed nothing. Two of consumer B's PRs did exactly that on
+          2026-07-30 (#72 and #73, six empty runs between them) — one of them
+          only correcting "the six checkers" to "the checkers".
+
+          As ordinary repo content, the standards can be tuned in a PR that still
+          gets reviewed. Keep this path OUT of `.github/workflows/`.
+        type: string
+        default: .github/claude-review-focus.md
+      focus:
+        description: >-
+          Inline fallback, used only when `focus_file` is absent. Prefer the file:
+          anything written here is back inside the workflow and carries the
+          blind-your-own-PR problem again.
+        type: string
+        default: ""
+      full:
+        description: >-
+          Review the whole PR instead of the delta since the last pass. It stays
+          a decision somebody makes, never a state the review infers — the only
+          question is who makes it.
+
+          A caller does NOT need to set this for the `@claude` path: an
+          issue_comment event already means a human asked, and this workflow can
+          read the event itself. It was a caller input at first, which put a
+          `full:` line testing `github.event_name` into every consumer — the same
+          line, copied, for a fact this file can see directly. That is the
+          duplication the shared workflow exists to remove.
+
+          Written WITHOUT expression delimiters on purpose. GitHub resolves
+          `${…}`-style expressions wherever they appear in a workflow file,
+          including inside a description, and `github.*` is not available in this
+          context — so quoting one here as an example is not documentation, it is
+          an invalid workflow file. It cost six red runs across three branches,
+          reported only as "This run likely failed because of a workflow file
+          issue" with zero jobs and no line number.
+
+          What it is still for is the OTHER reasons a caller might want a full
+          pass — a weekly scheduled sweep, a label, a manual dispatch. Those are
+          genuinely the caller's to know.
+
+          `boolean`, not a string: GitHub type-checks reusable-workflow inputs at
+          dispatch, and a boolean handed to a `type: string` input is rejected
+          before any job starts — the whole review fails rather than degrades.
+        type: boolean
+        default: false
+      runner_labels:
+        description: >-
+          JSON array of runner labels, e.g. '["self-hosted","perf-runner"]'.
+          A JSON string rather than a list because `runs-on` needs fromJSON to
+          accept a multi-label set through an input.
+        type: string
+        default: '["self-hosted"]'
+      model:
+        description: >-
+          Claude model, pinned to an explicit id. `[1m]` is the 1M-context
+          variant — a full-PR diff on a monorepo needs it.
+
+          NOT the `opus` class alias. The alias looked better (it would follow the
+          newest Opus with no edit here) but measurement says it does not: two of
+          consumer B's runs an hour apart both requested `opus[1m]` and were served
+          `claude-opus-5[1m]` at 05:50 and `claude-opus-4-8[1m]` at 07:10
+          (runs 30519581623 and 30521556374, same `init` block field). The alias
+          can drop a tier silently, and a review is exactly the job where you do
+          not want that happening unannounced.
+
+          The argument for the alias was that a frozen id costs a workflow edit
+          in every consumer at each release. That argument died with this file:
+          the edit is now one line, in one repo, and `v1` carries it everywhere.
+        type: string
+        default: claude-opus-5[1m]
+      effort:
+        description: >-
+          Reasoning effort. Stated here on purpose: it was running at `xhigh`
+          because the self-hosted runner's own settings.json says so, not because
+          anyone chose it — the same class of bug as the unstated model, and a
+          large part of why a single review on B#69 reported $8.08 of usage.
+          `xhigh` is a deliberate choice for a reviewer (it is what found the
+          two-Pulse-surfaces accent mismatch); the point is that it is now the
+          workflow's decision and cannot be changed by editing a runner.
+        type: string
+        default: xhigh
+      allowed_tools:
+        description: >-
+          EXCLUSIVE allowlist — anything omitted is DENIED, and a denial is not
+          merely a lost capability: the action reports `is_error: true` and the
+          whole check goes RED. B#69 run 30526098269 finished 44 turns and
+          failed on `permission_denials_count: 8`. So this list must cover the
+          read-only plumbing a reviewer actually reaches for, not just the
+          obvious tools — hence the git plumbing (`merge-base` for the base-diff,
+          `rev-parse`, `status`, `ls-files`) alongside Read/Grep/Glob.
+
+          `mcp__github_comment__update_claude_comment` is BACK, and it is now the
+          primary way the summary is posted. Removing it was my mistake, and the
+          reasoning was a bad comparison: consumer A had zero summaries
+          with it and consumer B had four with `gh pr comment`, so I blamed the
+          tool. The runners differ. **Consumer A's runner has no `gh` at
+          all** (`gh: command not found`; the container ships curl/jq/python3/node
+          and not the GitHub CLI). Every `gh`-based summary path was therefore
+          dead on that box the moment I made `gh` the only one — which is exactly
+          what happened on A#288: the review ran, found nothing new, and had
+          nowhere to say so.
+
+          The MCP tool needs no binary on the runner. `gh` stays as a second
+          option for runners that have it; a review must not assume its host.
+
+          Still NOT added: `curl`, and the reason stands — this review reads
+          untrusted PR content, and a general-purpose HTTP client in that context
+          is an exfiltration channel for anything an injected prompt talks it into.
+          What HAS changed is the price. That refusal used to cost the thread memory
+          on a gh-less runner, accepted as "the cheaper failure"; it was not cheap.
+          Consumer A's runner has no `gh`, so its review ran blind on every
+          pass and re-raised settled findings for weeks — DEPLOY.md:69 on A#321 five
+          times over nine hours. The memory is now read in a STEP (see "Read prior
+          review threads") and handed to the model as text, so the model needs no
+          fetching tool of any kind and no runner has to have `gh` for dedupe to
+          work. `gh` remains for the repos that do have it, for everything else.
+
+          Still read-and-comment only: no Edit, no Write, no commit, no merge.
+        type: string
+        default: mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git status:*),Bash(git ls-files:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(command -v:*),Bash(which:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(wc:*)
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: "Claude subscription OAuth token (repo secret; pass with `secrets: inherit`)."
+        required: true
+
+jobs:
+  review:
+    name: Claude review
+    # One review per pull request: a new push cancels the review of the commit it
+    # replaced, rather than leaving two reviews racing to comment on the same
+    # lines.
+    #
+    # HERE rather than in each caller, for the same reason as the guards below.
+    # It was in the callers, and it was already wrong in both: the group read
+    # `github.event.pull_request.number`, which does not exist on an
+    # issue_comment — so every comment-triggered run in the repo landed in one
+    # group named after nothing and cancelled the previous one, no matter which
+    # pull request it belonged to. That is not a mistake each consumer should get
+    # to make independently.
+    #
+    # `github.repository` is in the key because this group is evaluated in the
+    # CALLER's run; without it two repos calling this workflow would share a
+    # namespace and cancel each other's reviews.
+    concurrency:
+      group: claude-review-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    # Both guards live HERE so no caller can forget one.
+    #  - draft: review once the PR is ready, not on every intermediate push.
+    #  - dependabot: GitHub runs dependabot PRs in a restricted context with NO
+    #    access to repo secrets, so the token is empty and the action hard-fails
+    #    every time. An AI review of a lockfile bump is worthless anyway.
+    #  - fork: `on: pull_request` fires for fork PRs too. This job checks out the
+    #    PR's branch and runs an agent on a PERSISTENT self-hosted runner (Docker
+    #    socket, overlay network, tailnet) with `secrets: inherit`. Without this
+    #    gate an arbitrary GitHub user gets code execution on that box. The token
+    #    would not reach a fork PR anyway, so the job could only fail — skipping
+    #    is both safer and more honest. Caught by an architecture review on
+    #    A#288, which added it to its own caller; it belongs
+    #    here, so no repo carries the hole while waiting for its own PR. The
+    #    `event_name` half keeps it correct if a non-PR trigger is ever added.
+    #  - comment author: the same hole as the fork gate, through a different door.
+    #    An `issue_comment` runs in the BASE repo's context WITH its secrets even
+    #    when the pull request came from a fork, and the fork gate above does not
+    #    apply to it — `github.event.pull_request` does not exist on that event.
+    #    Without this an outsider starts an agent on the persistent self-hosted
+    #    runner by typing a comment. It lives here rather than only in the caller
+    #    for the same reason as the others: a consumer adding the `@claude`
+    #    trigger must not have to remember the guard that makes it safe.
+    #    Bots are excluded from that path outright: this review posts a comment
+    #    on every run, so any bot whose comment could carry the trigger phrase —
+    #    including a future version of this one quoting itself — is a loop that
+    #    spends a self-hosted runner and a paid model on nothing.
+    if: >-
+      ${{ !github.event.pull_request.draft
+          && github.actor != 'dependabot[bot]'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+          && (github.event_name != 'issue_comment'
+              || (github.event.issue.pull_request
+                  && github.event.comment.user.type != 'Bot'
+                  && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                              github.event.comment.author_association))) }}
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    # 20 was too short and cost a whole review: B#69 (75 files, 3744 lines,
+    # 29 existing threads) ran 20m24s and was cancelled mid-flight, publishing one
+    # comment and no summary. The scope is now the delta rather than the whole PR,
+    # so a typical pass should be far under this — 45 is headroom for the two cases
+    # that still read everything (a first pass, and a force-push that orphans the
+    # recorded SHA), not the expected duration. Concurrency cancels a superseded
+    # review, so the runner is never held by work nobody is waiting for.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the review can diff against the base branch and
+          # against the previously-reviewed SHA.
+          fetch-depth: 0
+          # On an `issue_comment` event `github.sha` is the DEFAULT BRANCH's head,
+          # not the pull request's — so a checkout with no ref would hand the
+          # review the wrong code entirely and it would happily report on develop
+          # while claiming to review the PR. Nothing about that failure is
+          # visible: the job is green, the summary is plausible, and every finding
+          # is about code the PR does not touch.
+          ref: >-
+            ${{ github.event_name == 'issue_comment'
+                && format('refs/pull/{0}/head', github.event.issue.number)
+                || '' }}
+
+      - name: Resolve the base branch, and refuse a fork
+        id: pr
+        # The prompt tells the review to diff "against the base branch" in three
+        # places, and until now never said WHICH — leaving it to work the answer
+        # out. On a runner with `gh` it can (`gh pr view`); the
+        # consumer A runner has no `gh`, so there it was guessing, and a
+        # wrong guess silently produces a diff against the wrong branch rather
+        # than an error. That guess is survivable on an incremental pass, which
+        # diffs against a SHA the summary records. It is not survivable on a first
+        # pass or a `full: true` pass, which have nothing BUT the base to diff
+        # against — so the new @claude path made a latent weakness load-bearing.
+        #
+        # `github.event.pull_request.base.ref` covers the pull_request events;
+        # the issue_comment payload has no base ref at all (the action's own
+        # source says so), so that case asks the API.
+        #
+        # actions/github-script rather than curl+jq or gh: it is first-party,
+        # runs on the node the runner already provides for every JS action, and
+        # so assumes nothing about what is installed on the box — which is the
+        # exact failure this step exists to fix.
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fromPayload = context.payload.pull_request?.base?.ref;
+            if (fromPayload) return fromPayload;
+
+            const { data } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.issue.number,
+            });
+
+            // THE FORK GATE'S SECOND DOOR. The job-level gate can only check
+            // fork-ness on `pull_request`, where the payload carries
+            // head.repo — an issue_comment payload has no pull request object
+            // at all, so a comment on a FORK's pull request slipped past it and
+            // put that fork's code on the persistent self-hosted runner, beside
+            // this repo's secrets, for an agent to read. The author guard does
+            // not close this: it establishes that a trusted person asked, not
+            // that the code is ours.
+            //
+            // Refused rather than allowed-because-a-maintainer-asked. That
+            // `/ok-to-test` pattern is defensible in general, but not while the
+            // job above justifies its fork gate by saying code execution on that
+            // box must not be reachable from outside — a second door open in
+            // the same file makes that sentence untrue.
+            //
+            // Loud, not silent: a red check that says why is actionable, and a
+            // review that quietly does not happen is the one outcome this
+            // workflow spends the most effort avoiding.
+            if (data.head.repo.full_name !== data.base.repo.full_name) {
+              core.setFailed(
+                `Refusing to review pull request #${data.number}: it comes from the fork ` +
+                `${data.head.repo.full_name}. Reviewing it here would run fork code on a ` +
+                `persistent self-hosted runner holding this repository's secrets. Push the ` +
+                `branch to ${data.base.repo.full_name} and open the pull request from there.`,
+              );
+              return "";
+            }
+            return data.base.ref;
+          result-encoding: string
+
+      - name: Trust git directories (self-hosted)
+        # On a self-hosted runner the workspace is owned by a different user than
+        # the job, so git refuses to touch it until the path is trusted.
+        run: git config --global --add safe.directory '*'
+
+      # The action buffers the inline comments the model asks for and posts them
+      # in a later step, from a path it HARDCODES as `/tmp/inline-comments-buffer.jsonl`
+      # rather than `$RUNNER_TEMP`. On a GitHub-hosted runner /tmp is new for every
+      # job and nobody ever sees this. On a SELF-HOSTED runner /tmp outlives the job
+      # and is shared by every repository that box builds, so a review reads whatever
+      # the previous review left there — and the "Post buffered inline comments" step
+      # posts it, to a different pull request, in a different repository.
+      #
+      # Measured on tenbytesltd/uir#1 on 2026-08-16, on a box a second consumer
+      # also builds on:
+      #
+      #   Found 2 buffered inline comment(s)
+      #   Posting 2 classified-as-real comment(s)
+      #   failed apps/<app>/test/i18n_test.dart:123: pull_request_review_thread.path
+      #                                              could not be resolved
+      #   Posted 0/2
+      #
+      # Nothing landed only because a Flutter test path does not exist in a Python
+      # repository. A file both repositories DO have — `README.md`, `package.json` —
+      # resolves, and one repository's review comment is published on another's pull
+      # request. That is a cross-repository disclosure, not an annoyance, and it is
+      # the reason this runs BEFORE the review rather than after it: cleaning up
+      # afterwards still leaves the window open for a job that crashes.
+      #
+      # Upstream fix is `$RUNNER_TEMP`; until the action ships it, this is the guard.
+      - name: Discard any inline-comment buffer left by another repository
+        run: |
+          BUF=/tmp/inline-comments-buffer.jsonl
+          if [ -f "$BUF" ]; then
+            echo "::warning::a stale inline-comment buffer was present before this           review ran ($(wc -l < "$BUF") entries) and has been discarded; on a shared           self-hosted runner it belongs to whichever repository built here last"
+            rm -f "$BUF"
+          fi
+
+      # The four dedupe rules in section 1 are worth exactly what the reviewer's
+      # ability to READ its own past comments is worth — and on a host without the
+      # GitHub CLI that was nothing. Consumer A's runner ships
+      # curl/jq/python3/node and no `gh`, so the `gh api graphql` those rules depended
+      # on exited 127 and every pass there ran with no memory at all. Measured on
+      # A#321: the SAME comment on DEPLOY.md:69 five times across
+      # nine hours, on a file only two of its thirteen pushes touched. Also ×3 on A#325
+      # and ×2 on A#322. The rules were never the problem; their only input channel was
+      # missing on one of the two consumers, silently.
+      #
+      # Fetching HERE settles it without reopening what the `curl` note above decided.
+      # That decision was to keep a general-purpose fetcher away from the MODEL, since
+      # this review reads untrusted PR content and such a tool is an exfiltration
+      # channel for whatever an injected prompt talks it into. A step is not the model:
+      # it runs before the prompt exists, over one fixed query, with the job token, and
+      # hands back text. The model still gets no network tool — it just stops being
+      # amnesiac on hosts that lack `gh`. `gh` stays allowed for the repos that have it.
+      #
+      # github-script is a JavaScript action, so it needs nothing installed beyond the
+      # runner's own node — which is the entire point on a gh-less box.
+      - name: Read prior review threads (the reviewer's memory)
+        id: memory
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // issue_comment (`@claude-review`) carries no pull_request object.
+            const pr = context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!pr) { core.setOutput('digest', '(no pull request in this event)'); return; }
+            const q = `query($owner:String!,$repo:String!,$pr:Int!){
+              repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+                reviewThreads(first:100){ nodes{
+                  isResolved isOutdated path line
+                  comments(first:20){ nodes{ author{login} body } } } } } } }`;
+            let nodes = [];
+            try {
+              const r = await github.graphql(q, { owner: context.repo.owner, repo: context.repo.repo, pr });
+              nodes = r.repository.pullRequest.reviewThreads.nodes ?? [];
+            } catch (e) {
+              // Never fail the review over its memory. A blind pass repeats itself; a
+              // review that does not run at all says nothing about a PR that is merging.
+              core.warning(`could not read review threads: ${e.message}`);
+              core.setOutput('digest', `(FAILED to read: ${e.message} — treat yourself as having NO memory, and say exactly that in the summary)`);
+              return;
+            }
+            const CAP = 120, BODY = 400;
+            const lines = nodes.slice(0, CAP).map((t) => {
+              const cs = t.comments.nodes ?? [];
+              const state = t.isResolved ? 'RESOLVED' : (t.isOutdated ? 'OUTDATED' : 'OPEN');
+              const lastBy = cs[cs.length - 1]?.author?.login ?? '?';
+              const body = (cs[0]?.body ?? '').replace(/\s+/g, ' ').slice(0, BODY);
+              return `- [${state}] ${t.path}:${t.line ?? '?'} — last comment by @${lastBy}\n  ${body}`;
+            });
+            // Say what was dropped. A silently truncated memory reads as "nothing more
+            // was ever said here", which is the precise failure this step exists to end.
+            if (nodes.length > CAP) lines.push(`- (…and ${nodes.length - CAP} further threads NOT listed — say so in the summary instead of assuming they do not exist)`);
+            core.setOutput('digest', lines.length ? lines.join('\n') : '(none — this is your first pass on this PR)');
+
+      - name: Run Claude review
+        # Pinned to the v1 commit SHA — a moving tag on a third-party action is a
+        # supply-chain risk (it runs with repo write access and secrets).
+        uses: anthropics/claude-code-action@3553f84341b92da26052e28acf1aa898f9511f32 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # These two are what make the summary land as a normal PR comment, and
+          # both default to false — which is the real reason the summary never
+          # appeared, not the tool that writes it.
+          #
+          # `update_claude_comment` UPDATES a tracking comment; it does not create
+          # one. Without track_progress there is no such comment, so the tool has
+          # nothing to update and posts nothing — silently. Consumer A
+          # had zero summaries with the tool both allowed AND explicitly asked for
+          # in the prompt, which I first misread as "the tool is broken" and then
+          # as "the runner has no gh". Neither was the cause; this was.
+          #
+          # use_sticky_comment keeps it to ONE comment reused across pushes, so a
+          # PR that takes ten pushes ends with one summary that was edited, not
+          # ten appended.
+          track_progress: "true"
+          use_sticky_comment: "true"
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number || github.event.issue.number }} of ${{ github.repository }}.
+
+            EVENT: ${{ github.event_name }} ${{ github.event.action }}
+            PREVIOUSLY REVIEWED SHA: ${{ github.event.before }}
+            CURRENT SHA: ${{ github.event.after }}
+            BASE BRANCH: origin/${{ steps.pr.outputs.result }}
+
+            Wherever this prompt says "the base branch", it means exactly that
+            ref. Do not infer it from the branch name, the repo's default branch,
+            or `gh` — it is resolved for you above precisely so you never guess,
+            and a wrong base yields a plausible diff rather than an error.
+
+            ## 1. Read your own memory FIRST — before you look at any code
+
+            You have reviewed this PR on earlier pushes. You do not remember it:
+            every run starts with an empty context. The review threads ARE your
+            memory — and they are already below, fetched for you before this prompt
+            was assembled. Do NOT go looking for them with `gh`: reading them used to
+            be your job, and on a runner without the GitHub CLI it failed silently,
+            which is how one nit reached the same file five times. Read every line
+            here before you open a single file.
+
+            Each entry is `[STATE] path:line — last comment by @who`, then the opening
+            comment, truncated. STATE is RESOLVED (settled), OUTDATED (the code it
+            pointed at has moved) or OPEN.
+
+            EXISTING REVIEW THREADS ON THIS PR:
+            ${{ steps.memory.outputs.digest }}
+
+            Four rules on what is above. They are absolute, not advisory:
+
+            - **`[RESOLVED]` → the thread is CLOSED.** Never make that point
+              again, in any wording, on any line. Do not "re-check whether it is
+              still valid" — someone decided it was done. Closed.
+            - **The last comment in the thread is from a human (not you) → that is
+              a DECISION.** Someone answered you, or disagreed with you. Never
+              re-litigate it. If genuinely NEW code has made the concern newly
+              dangerous, you may say so exactly once, and you must say plainly
+              that you have read the earlier reply and why the new code changes it.
+            - **`[OUTDATED]` → the code that thread pointed at has moved.**
+              Re-read the file as it is now before you say anything. Never restate
+              the old finding from the thread's text.
+            - **`[OPEN]` and the last comment is yours → already said.** Silence. This is the rule that was unenforceable while the fetch could fail, and the one that matters most: it is the difference between a review that accumulates and one that repeats.
+
+            A second identical nit is worse than saying nothing: it teaches the
+            author to stop reading you.
+
+            ## 2. Scope
+
+            FULL REVIEW REQUESTED: ${{ inputs.full || github.event_name == 'issue_comment' }}
+
+            **If that says true, review the WHOLE pull request** — every file in
+
+                git diff origin/${{ steps.pr.outputs.result }}...HEAD
+
+            as if you had never seen it. Three dots, not two: it diffs against the
+            merge base, so a base branch that moved on while this PR was open does
+            not show up as the PR's own work. Ignore
+            the SHA in your own summary marker and do not narrow to a delta. A
+            human asked for this deliberately, which outweighs any saving from
+            skipping what you looked at before. Say in the first line of the
+            summary that this was a full pass, so a longer list of findings is not
+            read as a sudden burst of new problems.
+
+            Otherwise, review the delta, not the PR. Your own summary comment
+            records the commit you last reviewed, in its marker:
+
+                <!-- claude-review-summary sha=<the SHA you reviewed> -->
+
+            Read that SHA out of the marker, then your scope is exactly:
+
+                git diff <that SHA> HEAD
+
+            Nothing outside that diff is in scope. Do not re-read files the new
+            commits do not touch, and do not re-derive conclusions your previous
+            summary already records — that is the single most expensive thing this
+            review can do, and on a large PR it is most of the cost.
+
+            Two cases fall back to the full PR diff
+            (`git diff origin/${{ steps.pr.outputs.result }}...HEAD`), and only
+            these two: there is no previous summary (this is the first pass),
+            or the recorded SHA is unreachable because the branch was force-pushed
+            or rebased (`git cat-file -e <sha>^{commit}` fails). In the second
+            case say so in one line in the summary, so nobody reads a full re-review
+            as a sudden burst of new findings. Never report a git failure as a
+            code finding.
+
+            **The trade you are making, so you can compensate for it inside the
+            delta:** a change here can break a call site an earlier push added,
+            and that call site is not in your diff. You cannot go looking for it
+            in general — but when the delta changes a signature, a default, a
+            token, an exported name or a shared contract, say so explicitly in the
+            summary and name what it could reach. That sentence is what a human
+            uses to decide whether to look wider.
+
+            ## 3. What to look for in THIS repository
+
+            Read `${{ inputs.focus_file }}`. That file holds this repository's
+            review standards, and it is the authority for this section. Read it
+            before you judge anything, not after.
+
+            If it does not exist, use what follows instead — and say in the
+            summary that the repo has no focus file, so somebody adds one:
+
+            ${{ inputs.focus }}
+
+            ## 4. How to report
+
+            **Post the summary EARLY, then keep it updated — do not save it for
+            the end.** Post a provisional summary the moment you have read the
+            threads and the diff, then refine it as you go, and once more when
+            you finish.
+
+            One sticky comment, edited — not a new one per push.
+
+            **Use `update_claude_comment` for it.** It is the only channel that
+            needs nothing installed on the runner, and the runners differ: one of
+            these repos has no `gh` at all. Do not probe for `gh` first; go
+            straight to the MCP tool.
+
+            `gh`, where it exists, is only for reading — the thread state in
+            section 1. If you want the sticky comment's own history:
+
+                gh api repos/<owner>/<repo>/issues/<pr>/comments \
+                  --jq 'map(select(.body | startswith("<!-- claude-review-summary")))[-1].id'
+
+            Always keep the marker as the first line, and always stamp the commit
+            you reviewed into it:
+
+                <!-- claude-review-summary sha=<CURRENT SHA> -->
+
+            The marker does two jobs: it is how the next run finds this comment
+            instead of appending a second one, and it is the high-water mark that
+            gives the next run its scope (section 2). A summary without the SHA
+            forces the next pass to re-review the whole PR.
+
+            **Never put the summary in an inline code comment.** If every summary
+            channel fails, say so in your final message and let the job report the
+            failure — a red check is a signal somebody acts on. Attaching a
+            PR-wide summary to a line of an unrelated file is worse than silence:
+            it lands on code that has nothing to do with it, it cannot be found
+            later, and it teaches the reader that inline comments are not about
+            the line they sit on. This has happened once
+            (A#288, a summary on line 65 of a generated icon
+            data file) and it is the reason this paragraph exists.
+
+            **If a capability is missing, degrade loudly and narrowly.** Losing
+            the thread read in section 1 means you have no memory of what was
+            already settled. In that case say so in one line at the top of the
+            summary and raise only what is unambiguously new in this delta —
+            never re-derive the whole PR and never re-raise old findings on the
+            assumption they were forgotten.
+
+            **Carry the summary forward; do not rewrite it from scratch.** The
+            previous summary is a record, not a draft. Its list of things checked
+            and found sound is the expensive part — copy it across, and re-verify
+            an item ONLY when the new delta touches what it claims. Add this pass's
+            findings to it. Drop an item only when the new code makes its claim
+            false, and say that you dropped it.
+
+            **The final update must contain no promise of future content.** Not a
+            rephrased one either: the rule is the invariant, not a list of banned
+            phrases. "still finishing", "will be appended", "are being appended",
+            "to follow" and anything else meaning the same thing are all the same
+            violation. Enumerating the phrases did not work — the wording simply
+            changed while the promise stayed.
+
+            So: whatever you have when you write the last update IS the review.
+            If you planned a pass and did not run it, say that in the past tense
+            and stop — "I did not check X" is useful; "X is coming" is not, because
+            nothing will come. Nobody reads this comment again after the job ends,
+            and a reader cannot tell an abandoned review from a finished one if the
+            text still promises more.
+
+            The same applies across runs. If a previous summary promised work, do
+            it in THIS pass or drop the promise — do not carry it forward a second
+            time. It has already been promised twice on the same PR without being
+            delivered.
+
+            Write it early because this job can be cut off — a timeout, or a new
+            push cancelling this run. Whatever you last wrote in that comment is
+            what the author sees. A review that ends with no comment at all is
+            indistinguishable from a review that never ran, and that is the one
+            outcome to avoid. It has already happened twice: once by dropping
+            both findings, once by being cancelled at the 20-minute mark with the
+            summary still unwritten.
+
+            Post it even when you found nothing ("reviewed <n> files, nothing to
+            flag"), and even when everything you found failed to post inline.
+
+            **Before your FIRST inline comment, get the list of commentable
+            paths** — `gh pr diff --name-only` — and keep it. GitHub accepts an
+            inline comment only on a path in that list; anything else is rejected
+            with `pull_request_review_thread.path could not be resolved` and the
+            finding is lost. Check the path against the list rather than
+            attempting the call to find out.
+
+            The trap that has actually caught this review, twice on the same PR:
+            same-named files under sibling directories — `apps/<a>/test/x_test.dart`
+            vs `apps/<b>/test/x_test.dart`. It aimed at `apps/train/test/i18n_test.dart`
+            when the PR touched `apps/nutrition/test/i18n_test.dart`. If a finding
+            is real but its file is not in the diff, it belongs in the summary,
+            named with its path and line — that is a legitimate thing to report,
+            just not an inline comment.
+
+            **A finding you cannot place inline goes in the summary instead.**
+            Never drop it silently. If create_inline_comment returns an error,
+            do not retry it against a different line — move that finding into the
+            summary with its file and line written in the text.
+
+            Be concrete: name the failing input and the wrong output it produces.
+            A finding a reader cannot reproduce is noise. Prefix each one with a
+            severity — P1 (broken), P2 (real bug, narrow scope), P3 (nit). Do not
+            flag anything a linter or formatter already catches. If the change is
+            clean, say so in one line rather than inventing nits.
+          claude_args: >-
+            --model "${{ inputs.model }}"
+            --effort "${{ inputs.effort }}"
+            --allowed-tools "${{ inputs.allowed_tools }}"
