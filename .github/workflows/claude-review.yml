@@ -1,32 +1,38 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # VENDORED COPY. Do not edit below the marker.
 #
-# Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml on `main`
-# Commit: bf0df4c64a4a0819bb0d029dad72ea8be772765a
-#         (playbooks#32, merged 2026-08-16 15:25 UTC)
-#
-# THE FULL FORTY, not a prefix. The re-vendor command below resolves `?ref=v1`,
-# a MOVING tag, so this field is the only record of which commit this copy
-# actually is — it is what a reader compares the tag against to answer whether
-# v1 has moved since. A short sha is ambiguous across a repository's lifetime
-# and a tag name is not a revision at all. Raised as P3 on the sibling public
-# repository's copy of this same header, and it applies here identically.
+# Source: tenbytesltd/playbooks/.github/workflows/claude-review.yml at tag `v1`
+# Commit: 3786db9e0de9509fad61f2ce94ba2fe2e1ec5646
+#         (playbooks#33, merged 2026-08-16 16:14 UTC; `v1` moved onto it)
 # Taken:  2026-08-16
 #
-# `main`, NOT the `v1` tag, and that is deliberate rather than sloppy. `v1` still
-# resolves to `a6bca1f`, whose comments name a CLIENT's repository ten times,
-# with two of its pull request numbers and a `file:line` from it. Vendoring the
-# tag into a repository about to be made public would publish a private subject
-# — which is not hypothetical: the sibling `tenbytesltd/uir-public-site` did
-# exactly that on 2026-08-16 at 07:38 UTC and the name has been on the open
-# internet since. PR #32 is the fix at the source; it is merged, and the tag has
-# not been moved onto it yet.
+# THE SECOND COPY THIS FILE HAS HELD, and the first taken from the tag:
 #
-# WHAT THIS OWES: the day `v1` moves, re-vendor against the tag with the recipe
-# below. An empty diff then is the proof this copy and the shared review
-# converged; a non-empty one is the drift, named. It is owed on that day rather
-# than whenever somebody remembers, because a copy nobody compares is exactly how
-# the sibling ended up thirteen days behind without a single check going red.
+#   1. `bf0df4c` — playbooks#32, taken from `main` while `v1` still resolved to
+#      `a6bca1f`, whose comments named a CLIENT's repository ten times with two
+#      of its pull request numbers and a `file:line`. Vendoring the tag into a
+#      repository about to be made public would have published a private subject
+#      — not hypothetical: the sibling `tenbytesltd/uir-public-site` did exactly
+#      that at 07:38 UTC and the name was on the open internet for hours.
+#   2. `3786db9` — this one, from `v1`, which now points at the fixed revision.
+#
+# What copy 2 adds is cosmetic and the record of it is not: the `::warning::` in
+# the buffer-discard step printed two runs of eleven spaces mid-sentence, a
+# wrapped message joined by deleting its newlines. Raised on the sibling's copy,
+# fixed at the source in playbooks#33, arrived here as a replacement.
+#
+# WHAT COPY 1 OWED, and this discharges it: it was taken from `main` rather than
+# the tag, and said so, and said the debt was due the day `v1` moved. `v1` moved
+# at 17:0x and this is that day. The debt was written into the file rather than
+# left in somebody's memory precisely because a copy nobody compares is how the
+# sibling ended up thirteen days behind without a single check going red.
+#
+# THE COMMIT FIELD IS THE FULL FORTY, not a prefix. The re-vendor command below
+# resolves `?ref=v1`, a MOVING tag, so this field is the only record of which
+# commit this copy actually is — it is what a reader compares the tag against to
+# answer whether v1 has moved since. A short sha is ambiguous across a
+# repository's lifetime and a tag name is not a revision at all. Raised as P3 on
+# the sibling's copy of this same header, and it applies here identically.
 #
 # WHY a copy, when the whole point of that file is that the review lives ONCE:
 # this repository is being made PUBLIC, and `playbooks` is PRIVATE. A public
@@ -429,7 +435,18 @@ jobs:
         run: |
           BUF=/tmp/inline-comments-buffer.jsonl
           if [ -f "$BUF" ]; then
-            echo "::warning::a stale inline-comment buffer was present before this           review ran ($(wc -l < "$BUF") entries) and has been discarded; on a shared           self-hosted runner it belongs to whichever repository built here last"
+            # ONE line, and short enough to stay one. The first version of this
+            # message was written wrapped and then joined by deleting the
+            # newlines, which left the continuation indent INSIDE the string —
+            # two runs of eleven spaces, mid-sentence, printed into every job
+            # log that hit this branch. Eleven is this line's indentation minus
+            # one, which is the signature of exactly that edit.
+            #
+            # A shell string has no line continuation that eats indentation, so
+            # a message long enough to wrap is a message with the file's layout
+            # baked into it. Say less rather than wrap. (The runs are described
+            # here and not reproduced: this file is grepped for them.)
+            echo "::warning::discarded a stale inline-comment buffer ($(wc -l < "$BUF") entries) left in /tmp by whichever repository built on this runner last"
             rm -f "$BUF"
           fi
 
