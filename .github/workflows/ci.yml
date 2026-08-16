@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # **HOSTED, unconditionally, and this repository never runs on the
+    # organisation's own boxes.**
+    #
+    # The previous revision derived the runner from `github.event.repository.private`
+    # so the job could start today, on `self-hosted`, and move itself to hosted at
+    # the visibility flip. It worked — a green run is on record — and it is still
+    # the wrong shape for THIS repository, because what it optimised for was the
+    # window before the flip and what it cost was a rule that has to hold after
+    # it.
+    #
+    # This is a public developer TOOL that opens strangers' packages. It will take
+    # fork pull requests, `npm install` executes install scripts from whatever
+    # resolved that day, and there is no lockfile pinning them. A runner selection
+    # that CAN name `self-hosted` puts that one expression between a stranger's
+    # code and hardware other repositories build on — and an expression is a thing
+    # somebody edits. One label, always hosted, is a rule a reader can check in a
+    # second and nobody can widen by accident.
+    #
+    # WHAT IT COSTS, said rather than discovered: while this repository is
+    # PRIVATE this job cannot start at all. Hosted minutes are billed for private
+    # repositories, the organisation's allowance is exhausted, and the run dies in
+    # about four seconds with zero steps and one annotation — *"recent account
+    # payments have failed or your spending limit needs to be increased"*. That
+    # red means "not yet paid for", not "the code is broken". It clears when the
+    # repository is made public, which is the plan this file was written for.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - run: npm run build

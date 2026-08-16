@@ -1,0 +1,53 @@
+name: Deploy GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Pages does not publish from a private repository on this organisation's
+    # plan, so while this repository is private every push to the default branch
+    # would put a red deploy on a branch whose code is fine. SKIPPED rather than
+    # failed, and it starts working on the day visibility changes with no edit
+    # here. A red that means "not yet" teaches readers to ignore reds.
+    #
+    # This used to cite `ci.yml` as precedent for deriving from
+    # `github.event.repository.private`. It is not one any more: `ci.yml` pins
+    # `ubuntu-latest` unconditionally and argues that a runner selection able to
+    # name `self-hosted` is the wrong shape for a public repository. The two
+    # answer different questions — which machine runs a job, versus whether a
+    # deploy is possible at all — so this guard stands on its own reason.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
