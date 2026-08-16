@@ -245,11 +245,26 @@ test("every array on every memoised node is frozen, leaves included", () => {
     // that coincides with it only because the map is built by pushing, so an
     // entry never exists empty.
     //
-    // The refactor that separates them is seeding: add
-    // `for (const id of this.nodeIds) this.childrenByParent.set(id, [])` and
-    // every node has an entry, `?? NO_CHILDREN` becomes dead code, and a counter
-    // reading `children.length === 0` stays happily above zero while covering
-    // nothing. Measured — it turns this case red now and left it green before.
+    // The refactor that separates them is seeding the nodes that have no entry,
+    // after the containment map is complete and after `nodeIds` exists:
+    //
+    //     for (const id of this.nodeIds)
+    //       if (!this.childrenByParent.has(id))
+    //         this.childrenByParent.set(id, Object.freeze([]));
+    //
+    // Then every node has an entry, `?? NO_CHILDREN` becomes dead code, and a
+    // counter reading `children.length === 0` stays happily above zero while
+    // covering nothing. That is the line that was run, and it turns this case
+    // red now and left it green before.
+    //
+    // **The guard is not decoration.** An earlier version of this comment quoted
+    // the same loop WITHOUT `if (!has(id))`. There is nowhere to put that line
+    // where it seeds: `nodeIds` is not assigned until after the containment map
+    // is finished, so the only position where it compiles is one where
+    // `set(id, [])` overwrites every parent's children with an empty array. It
+    // is an erase, not a seed — this case would still go red, for the wrong
+    // reason, and so would others. Quoting a mutation is quoting code; it has to
+    // be the code that was run.
     //
     // An earlier version of this comment also offered `Map.groupBy` as such a
     // refactor. It is not one, and the difference is worth keeping: `groupBy`
