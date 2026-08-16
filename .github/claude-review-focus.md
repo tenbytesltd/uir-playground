@@ -35,17 +35,17 @@ where a reader meets a package, so its version of the class is:
 > *a package that declares less gets a cleaner bill of health than a package that
 > declares more.*
 
-Both live instances at the time this file was written:
+Both instances that prompted this section are now closed, and they are recorded
+because the shape recurs, not because the lines are still wrong:
 
-- `src/package-loader.ts:109` — `if (!entry.sha256) continue`. A manifest entry
-  with no ledger hash produces **no diagnostic at all**. A manifest that declares
-  hashes and fails them shows errors; a manifest that declares none shows a clean
-  bar. Stripping the ledger is the cheapest way to a green package.
-- `src/package-loader.ts:111` — a missing Web Crypto is a `warning` and the
-  package loads anyway, while `README.md:29` states the browser verifies the
-  ledger *"before the package is presented as verified"*. There is no verified
-  state: `UIRPackageData` (`src/runtime.ts:47`) has no such field and nothing
-  gates on one. That sentence is a claim the code does not implement.
+- `if (!entry.sha256) continue` produced **no diagnostic at all**, so a manifest
+  that declared hashes and failed them showed errors while one that declared none
+  showed a clean bar. Stripping the ledger was the cheapest way to a green
+  package. Now an absent ledger is a `hash.absent` warning.
+- a mismatching shard was registered on the line ABOVE the ledger check, so it
+  was parsed, rendered, walked by the graph and used as a diff side anyway, with
+  one red row inside a drawer that starts closed as the only trace. Verification
+  now precedes admission, and `README.md` says what the code does.
 
 For any change touching diagnostics, verification or the counters in the
 Diagnostics bar (`src/Playground.tsx:99`), ask what it would take to make a
@@ -74,9 +74,12 @@ a stranger's `package.json`. The boundary is worth reviewing at these points:
 
 - `src/PlaygroundLab.tsx:86` — `?source=` and `?compare=` are **fetched on
   page load**, before any interaction. A link is therefore an instruction to the
-  visitor's browser to fetch and render a chosen package. `credentials: "omit"`
-  and browser CORS are what keep that from reaching the visitor's own data;
-  neither is tested (see below), and a change that relaxes either is serious.
+  visitor's browser to fetch and render a chosen package, which is what turns
+  every other item in this section from a bug into something a stranger can aim.
+  `credentials: "omit"` and browser CORS keep the RESPONSE from being read; they
+  do not keep the REQUEST from being sent, and a beacon needs only the request —
+  which is why `loadPackageFromUrl` now refuses a model path that resolves
+  outside the package rather than trusting the manifest.
 - `src/source-layer.ts:9` `cleanArchivePath` is the only defence against ZIP
   entry paths escaping the package. It is a string check on a path that later
   becomes a lookup key.
@@ -106,12 +109,18 @@ exist, and this is what they actually assert:
   over source text is a claim that a line exists, not that the fetch omits
   credentials or that the button does anything.
 
-So: **no test in this repository executes a load, a ZIP, a fetch, a render or a
-diff.** There is no DOM test environment. Nothing exercises `UIRRuntime`,
-`diffPackages` or `loadPackageFromFiles` on so much as the built-in example, and
-`src/example.ts` is right there as a fixture. A review should treat "the tests
-pass" as carrying almost no information about a change to `src/`, and should say
-so when a pull request leans on it.
+That was the whole of it. `tests/runtime-behaviour.test.mjs` and
+`tests/untrusted-package.test.mjs` now execute the runtime, the loader and the
+remote path — cycle detection, index equivalence against a re-derived scan,
+ledger verification, model-path containment — and every case was checked by
+mutating the code it covers.
+
+**Still not executed by anything: rendering.** There is no DOM environment, so
+`CanvasNode`, `TreeNode` and the inspector are reached by no test. The cycle
+guard in those three walkers is asserted indirectly, through the detector and
+through `allNodes()`, not by rendering a cyclic package. A review should treat
+"the tests pass" as saying something about `src/runtime.ts`, `src/package-loader.ts`
+and `src/source-layer.ts`, and nothing about `src/Playground.tsx`.
 
 Two more gaps in the build flow itself:
 

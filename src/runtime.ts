@@ -101,7 +101,37 @@ export class UIRRuntime {
   readonly nodeIds: string[];
   readonly sourceNames: Map<string, string>;
 
-  constructor(readonly pkg: UIRPackageData) {
+  // **Indexes, because every accessor below used to be a full scan and the
+  // render path calls them per node.** `node()` reaches `fact` five times,
+  // `factsOf` twice and one `boundValue` scan per binding; `CanvasNode` calls
+  // `node()` once per node per render, `treeMatches` calls it for every
+  // descendant of every ancestor on every keystroke in the search box, and
+  // `stats()` calls `allNodes()` unconditionally. On a 4,000-record package
+  // that is scans in the millions for one keypress.
+  //
+  // Built once in the constructor, off `records`, which is already complete by
+  // then. Nothing here changes an answer — each map returns what the scan it
+  // replaces returned, including the "first match wins" of `find`, and
+  // `tests/runtime-behaviour.test.mjs` recomputes them the slow way to say so.
+  private readonly factsBySubject = new Map<string, UIRRecord[]>();
+  private readonly factBySubjectKind = new Map<string, UIRRecord>();
+  private readonly relationsBySubject = new Map<string, UIRRecord[]>();
+  private readonly pieceByRole = new Map<string, string>();
+  private readonly valueByGroundRole = new Map<string, string>();
+  private readonly nodeCache = new Map<string, UIRNode>();
+
+  /** Node ids that lie on a `contains` cycle, empty when the graph is a tree. */
+  readonly cyclicNodeIds: string[];
+
+  // An explicit field rather than a constructor parameter property. The latter
+  // is the one TypeScript construct Node's strip-only type removal refuses, and
+  // it was the single thing standing between this runtime and being executed by
+  // a test at all — `tests/` could assert that source text mentions `UIRRuntime`
+  // and nothing more. It emits identical JavaScript.
+  readonly pkg: UIRPackageData;
+
+  constructor(pkg: UIRPackageData) {
+    this.pkg = pkg;
     this.manifest = pkg.manifest;
     this.records = Object.values(pkg.shards).flatMap((shard) =>
       Array.isArray(shard.records) ? shard.records : [],
@@ -112,6 +142,30 @@ export class UIRRuntime {
     this.contains = this.relations
       .filter((record) => record.kind === "contains")
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    for (const record of this.facts) {
+      if (!record.subject) continue;
+      const bySubject = this.factsBySubject.get(record.subject);
+      if (bySubject) bySubject.push(record);
+      else this.factsBySubject.set(record.subject, [record]);
+      // `set` only when absent, so this returns what `find` returned.
+      const key = `${record.subject}\u0000${record.kind ?? ""}`;
+      if (!this.factBySubjectKind.has(key)) this.factBySubjectKind.set(key, record);
+      if (record.kind === "design.binding" && typeof record.value?.groundRole === "string"
+          && !this.valueByGroundRole.has(record.value.groundRole)) {
+        this.valueByGroundRole.set(record.value.groundRole, record.subject);
+      }
+    }
+    for (const record of this.relations) {
+      for (const end of [record.source, record.target]) {
+        if (!end) continue;
+        const bySubject = this.relationsBySubject.get(end);
+        // A relation whose source and target are the same entity is listed
+        // once, which is what `filter(source === s || target === s)` did.
+        if (bySubject) { if (bySubject.at(-1) !== record) bySubject.push(record); }
+        else this.relationsBySubject.set(end, [record]);
+      }
+    }
 
     for (const relation of this.contains) {
       if (!relation.source || !relation.target) continue;
@@ -156,6 +210,65 @@ export class UIRRuntime {
           return [source.id, name];
         }),
     );
+
+    for (const selector of this.facts) {
+      if (selector.kind !== "resolution.selector" || !selector.subject) continue;
+      if (selector.value?.dimension !== "role" || typeof selector.value?.role !== "string") continue;
+      const resolution = this.byId.get(selector.subject);
+      if (resolution?.recordType !== "Entity" || typeof resolution.outcome !== "string") continue;
+      // First selector wins, as the original loop's early `return` did.
+      if (!this.pieceByRole.has(selector.value.role)) {
+        this.pieceByRole.set(selector.value.role, resolution.outcome);
+      }
+    }
+
+    this.cyclicNodeIds = this.findCycles();
+  }
+
+  /** Every node that lies on a `contains` cycle.
+   *
+   * `contains` comes from the package and nothing validated it. Three walkers
+   * recursed into it unguarded, so one extra relation — or `A contains A` in a
+   * single record — took the whole tab down with `RangeError: Maximum call
+   * stack size exceeded`, before any interaction, because `?source=` is fetched
+   * and rendered on load. The walkers now carry a visited set; this tells the
+   * reader WHY the tree stops where it does, so a broken package is reported
+   * rather than silently truncated.
+   *
+   * Iterative, not recursive: a detector that blows the stack on the input it
+   * exists to detect is not a detector.
+   */
+  private findCycles(): string[] {
+    const onCycle = new Set<string>();
+    const state = new Map<string, 1 | 2>();  // 1 = on the current path, 2 = done
+    for (const start of this.childrenByParent.keys()) {
+      if (state.get(start)) continue;
+      const stack: { id: string; next: number }[] = [{ id: start, next: 0 }];
+      state.set(start, 1);
+      while (stack.length) {
+        const frame = stack[stack.length - 1];
+        const children = this.childrenByParent.get(frame.id) ?? [];
+        if (frame.next >= children.length) {
+          state.set(frame.id, 2);
+          stack.pop();
+          continue;
+        }
+        const child = children[frame.next];
+        frame.next += 1;
+        if (state.get(child) === 1) {
+          onCycle.add(child);
+          for (let i = stack.length - 1; i >= 0; i -= 1) {
+            onCycle.add(stack[i].id);
+            if (stack[i].id === child) break;
+          }
+          continue;
+        }
+        if (state.get(child) === 2) continue;
+        state.set(child, 1);
+        stack.push({ id: child, next: 0 });
+      }
+    }
+    return [...onCycle].sort();
   }
 
   private isNodeId(value: string) {
@@ -165,15 +278,16 @@ export class UIRRuntime {
   }
 
   fact(subject: string, kind: string) {
-    return this.facts.find((record) => record.subject === subject && record.kind === kind);
+    return this.factBySubjectKind.get(`${subject}\u0000${kind}`);
   }
 
   factsOf(subject: string, kind?: string) {
-    return this.facts.filter((record) => record.subject === subject && (!kind || record.kind === kind));
+    const all = this.factsBySubject.get(subject) ?? [];
+    return kind ? all.filter((record) => record.kind === kind) : all;
   }
 
   relationsOf(subject: string) {
-    return this.relations.filter((record) => record.source === subject || record.target === subject);
+    return this.relationsBySubject.get(subject) ?? [];
   }
 
   textValue(subject: string) {
@@ -204,14 +318,7 @@ export class UIRRuntime {
   }
 
   resolutionPiece(role: string) {
-    for (const selector of this.facts.filter(
-      (record) => record.kind === "resolution.selector" && record.value?.dimension === "role" && record.value?.role === role,
-    )) {
-      if (!selector.subject) continue;
-      const resolution = this.byId.get(selector.subject);
-      if (resolution?.recordType === "Entity" && typeof resolution.outcome === "string") return resolution.outcome;
-    }
-    return undefined;
+    return this.pieceByRole.get(role);
   }
 
   bindingMap(subject: string | undefined) {
@@ -228,9 +335,7 @@ export class UIRRuntime {
 
   boundValue(groundRole: string | undefined) {
     if (!groundRole) return undefined;
-    return this.facts.find(
-      (record) => record.kind === "design.binding" && record.value?.groundRole === groundRole && typeof record.subject === "string",
-    )?.subject;
+    return this.valueByGroundRole.get(groundRole);
   }
 
   literal(valueId: string | undefined): Record<string, unknown> | undefined {
@@ -347,6 +452,8 @@ export class UIRRuntime {
   }
 
   node(subject: string): UIRNode {
+    const cached = this.nodeCache.get(subject);
+    if (cached) return cached;
     const role = this.role(subject);
     const piece = this.resolutionPiece(role);
     const pieceIdentity = piece ? this.fact(piece, "piece.identity")?.value : undefined;
@@ -355,7 +462,7 @@ export class UIRRuntime {
     const provenance = this.provenanceFor([entity, ...nodeFacts].filter(Boolean) as UIRRecord[]);
     const controlled = this.controls.get(subject);
     const gap = this.gaps.find((record) => record.target === subject);
-    return {
+    const built: UIRNode = {
       id: subject,
       key: nodeKey(subject),
       role,
@@ -373,6 +480,8 @@ export class UIRRuntime {
       sources: provenance.sources,
       modes: provenance.modes,
     };
+    this.nodeCache.set(subject, built);
+    return built;
   }
 
   allNodes() {

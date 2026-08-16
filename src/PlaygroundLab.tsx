@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Playground } from "./Playground";
-import { filesFromDrop, filesFromInput, loadPackageFromSelection, loadPackageFromUrl, type PackageSource } from "./source-layer";
-import { diffPackages } from "./semantic-diff";
-import { UIRRuntime, type UIRPackageData } from "./runtime";
+import { Playground } from "./Playground.tsx";
+import { filesFromDrop, filesFromInput, loadPackageFromSelection, loadPackageFromUrl, type PackageSource } from "./source-layer.ts";
+import { diffPackages } from "./semantic-diff.ts";
+import { UIRRuntime, type UIRPackageData } from "./runtime.ts";
 
 type LabView = "inspect" | "graph" | "diff";
 
@@ -15,8 +15,12 @@ function GraphView({ pkg }: { pkg: UIRPackageData }) {
   const nodes = runtime.allNodes().slice(0, 120);
   const included = new Set(nodes.map((node) => node.id));
   const depthCache = new Map<string, number>();
+  // The cache is seeded BEFORE recursing, not after. Writing it afterwards meant
+  // a `contains` cycle never hit a cached entry and this recursed until the stack
+  // died — the memo was there and could not break the loop it was walking.
   const depthOf = (id: string): number => {
     const cached = depthCache.get(id); if (cached !== undefined) return cached;
+    depthCache.set(id, 0);
     const parent = runtime.parentByNode.get(id);
     const depth = parent && included.has(parent) ? depthOf(parent) + 1 : 0;
     depthCache.set(id, depth); return depth;
@@ -32,8 +36,9 @@ function GraphView({ pkg }: { pkg: UIRPackageData }) {
 
 function DiffView({ before, after }: { before: UIRPackageData; after: UIRPackageData }) {
   const diff = useMemo(() => diffPackages(before, after), [before, after]);
-  const visible = diff.items.filter((item) => item.status !== "same").slice(0, 200);
-  return <section className="lab-view"><header className="lab-view-header"><div><span>SEMANTIC DIFF</span><strong>{before.manifest.packageVersion} → {after.manifest.packageVersion}</strong></div><p>Matched by stable semantic node key; compares meaning, resolution, bindings and children.</p></header><div className="diff-stats"><div><strong>+{diff.added}</strong><span>added</span></div><div><strong>−{diff.removed}</strong><span>removed</span></div><div><strong>{diff.changed}</strong><span>changed</span></div><div><strong>{diff.same}</strong><span>unchanged</span></div></div><div className="diff-list">{visible.length ? visible.map((item) => <article key={item.key} data-status={item.status}><span>{item.status}</span><div><strong>{item.after?.content || item.before?.content || item.key}</strong><code>{item.key}</code></div><p>{item.fields.join(" · ")}</p></article>) : <div className="lab-empty"><strong>No semantic changes.</strong><span>The snapshots resolve to the same semantic nodes.</span></div>}</div></section>;
+  const changes = diff.items.filter((item) => item.status !== "same");
+  const visible = changes.slice(0, 200);
+  return <section className="lab-view"><header className="lab-view-header"><div><span>SEMANTIC DIFF</span><strong>{before.manifest.packageVersion} → {after.manifest.packageVersion}</strong></div><p>Matched by stable semantic node key; compares meaning, resolution, bindings and children.</p></header><div className="diff-stats"><div><strong>+{diff.added}</strong><span>added</span></div><div><strong>−{diff.removed}</strong><span>removed</span></div><div><strong>{diff.changed}</strong><span>changed</span></div><div><strong>{diff.same}</strong><span>unchanged</span></div></div><div className="diff-list">{visible.length ? visible.map((item) => <article key={item.key} data-status={item.status}><span>{item.status}</span><div><strong>{item.after?.content || item.before?.content || item.key}</strong><code>{item.key}</code></div><p>{item.fields.join(" · ")}</p></article>) : <div className="lab-empty"><strong>No semantic changes.</strong><span>The snapshots resolve to the same semantic nodes.</span></div>}</div>{changes.length > visible.length ? <div className="limit-note">Showing {visible.length} of {changes.length} changed nodes; the counts above are over all of them.</div> : null}</section>;
 }
 
 export function PlaygroundLab({ initialPackage }: { initialPackage: UIRPackageData }) {

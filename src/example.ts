@@ -1,4 +1,4 @@
-import type { UIRPackageData, UIRRecord } from "./runtime";
+import type { UIRPackageData, UIRRecord } from "./runtime.ts";
 
 const records: UIRRecord[] = [
   { id: "example:surface:home", recordType: "Entity", kind: "Surface" },

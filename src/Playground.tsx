@@ -1,6 +1,6 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { useMemo, useState } from "react";
-import { UIRRuntime, type PackageDiagnostic, type UIRNode, type UIRPackageData } from "./runtime";
+import { UIRRuntime, type PackageDiagnostic, type UIRNode, type UIRPackageData } from "./runtime.ts";
 
 type CanvasMode = "render" | "semantics" | "resolution" | "provenance" | "gaps";
 type TreeFilter = "all" | "gaps" | "unresolved" | "inferred";
@@ -22,9 +22,21 @@ function modeBadge(node: UIRNode, mode: CanvasMode) {
   return undefined;
 }
 
-function CanvasNode({ runtime, id, selectedId, mode, onSelect }: { runtime: UIRRuntime; id: string; selectedId?: string; mode: CanvasMode; onSelect: (id: string) => void }) {
+// `seen` is the ancestor chain, and it is not an optimisation. `contains` comes
+// from the package and nothing validates it, so one relation pointing back up —
+// or `A contains A` in a single record — made this function recurse until React
+// threw `RangeError: Maximum call stack size exceeded` and the whole shell
+// unmounted: white screen, no diagnostic, and Diagnostics itself unreachable
+// because it unmounted too. `?source=` is fetched and rendered on page load, so
+// the URL was the whole exploit.
+//
+// A new Set per branch rather than one shared across the walk: a node legitimately
+// reachable by two different paths must still render under both. Only a repeat
+// within one ANCESTOR CHAIN is a cycle.
+function CanvasNode({ runtime, id, selectedId, mode, onSelect, seen = new Set<string>() }: { runtime: UIRRuntime; id: string; selectedId?: string; mode: CanvasMode; onSelect: (id: string) => void; seen?: Set<string> }) {
   const node = runtime.node(id);
-  const children = node.children.map((child) => <CanvasNode key={child} runtime={runtime} id={child} selectedId={selectedId} mode={mode} onSelect={onSelect} />);
+  const branch = new Set(seen).add(id);
+  const children = node.children.filter((child) => !branch.has(child)).map((child) => <CanvasNode key={child} runtime={runtime} id={child} selectedId={selectedId} mode={mode} onSelect={onSelect} seen={branch} />);
   const label = modeBadge(node, mode);
   const body = node.gap ?? node.content;
   const className = ["pg-node", selectedId === id ? "selected" : "", mode !== "render" ? "inspecting" : "", mode === "gaps" && node.gap ? "gap" : "", mode === "gaps" && !node.gap ? "dim" : ""].filter(Boolean).join(" ");
@@ -47,21 +59,25 @@ function CanvasNode({ runtime, id, selectedId, mode, onSelect }: { runtime: UIRR
   }
 }
 
-function treeMatches(runtime: UIRRuntime, id: string, query: string, filter: TreeFilter): boolean {
+function treeMatches(runtime: UIRRuntime, id: string, query: string, filter: TreeFilter, seen = new Set<string>()): boolean {
   const node = runtime.node(id);
   const search = !query || [node.id, node.key, node.role, node.content, node.pieceName].some((value) => value.toLowerCase().includes(query));
   const filtered = filter === "all" || (filter === "gaps" && Boolean(node.gap)) || (filter === "unresolved" && !node.piece) || (filter === "inferred" && node.modes.includes("inferred"));
-  return (search && filtered) || node.children.some((child) => treeMatches(runtime, child, query, filter));
+  const branch = new Set(seen).add(id);
+  return (search && filtered)
+    || node.children.some((child) => !branch.has(child) && treeMatches(runtime, child, query, filter, branch));
 }
 
-function TreeNode({ runtime, id, selectedId, expanded, query, filter, onToggle, onSelect }: { runtime: UIRRuntime; id: string; selectedId?: string; expanded: Set<string>; query: string; filter: TreeFilter; onToggle: (id: string) => void; onSelect: (id: string) => void }) {
+function TreeNode({ runtime, id, selectedId, expanded, query, filter, onToggle, onSelect, seen = new Set<string>() }: { runtime: UIRRuntime; id: string; selectedId?: string; expanded: Set<string>; query: string; filter: TreeFilter; onToggle: (id: string) => void; onSelect: (id: string) => void; seen?: Set<string> }) {
   const node = runtime.node(id);
   const normalizedQuery = query.trim().toLowerCase();
   const ownMatchesSearch = !normalizedQuery || [node.id, node.key, node.role, node.content, node.pieceName].some((value) => value.toLowerCase().includes(normalizedQuery));
   const ownMatchesFilter = filter === "all" || (filter === "gaps" && Boolean(node.gap)) || (filter === "unresolved" && !node.piece) || (filter === "inferred" && node.modes.includes("inferred"));
-  const childMatches = node.children.some((child) => treeMatches(runtime, child, normalizedQuery, filter));
+  const branch = new Set(seen).add(id);
+  const children = node.children.filter((child) => !branch.has(child));
+  const childMatches = children.some((child) => treeMatches(runtime, child, normalizedQuery, filter, branch));
   if (!(ownMatchesSearch && ownMatchesFilter) && !childMatches) return null;
-  const hasChildren = node.children.length > 0;
+  const hasChildren = children.length > 0;
   const isOpen = expanded.has(id) || Boolean(normalizedQuery) || filter !== "all";
   return <li className="tree-item">
     <div className={`tree-row ${selectedId === id ? "selected" : ""}`}>
@@ -70,7 +86,7 @@ function TreeNode({ runtime, id, selectedId, expanded, query, filter, onToggle, 
         <span className="tree-role">{node.role}</span><strong>{concise(node.content || node.key)}</strong><span className="tree-flags">{node.gap ? "△" : ""}{!node.piece ? " ◇" : ""}</span>
       </button>
     </div>
-    {hasChildren && isOpen ? <ul className="tree-children">{node.children.map((child) => <TreeNode key={child} runtime={runtime} id={child} selectedId={selectedId} expanded={expanded} query={query} filter={filter} onToggle={onToggle} onSelect={onSelect} />)}</ul> : null}
+    {hasChildren && isOpen ? <ul className="tree-children">{children.map((child) => <TreeNode key={child} runtime={runtime} id={child} selectedId={selectedId} expanded={expanded} query={query} filter={filter} onToggle={onToggle} onSelect={onSelect} seen={branch} />)}</ul> : null}
   </li>;
 }
 
@@ -124,12 +140,20 @@ export function Playground({ pkg }: { pkg: UIRPackageData }) {
     { severity: runtime.rootIds.length ? "success" : "error", code: "semantic.root", message: runtime.rootIds.length ? `${runtime.rootIds.length} render root${runtime.rootIds.length === 1 ? "" : "s"} discovered` : "No render root discovered" },
     ...(stats.gaps ? [{ severity: "warning" as const, code: "semantic.gaps", message: `${stats.gaps} explicit gap${stats.gaps === 1 ? "" : "s"} declared` }] : []),
     ...(stats.unresolved ? [{ severity: "warning" as const, code: "resolution.unresolved", message: `${stats.unresolved} node${stats.unresolved === 1 ? "" : "s"} without role → piece resolution` }] : []),
+    // Reported, not merely survived. The walkers stop at a repeat inside one
+    // ancestor chain, so a cyclic package renders a truncated tree instead of
+    // killing the tab — and a truncated tree that says nothing would be a
+    // package looking sound because something was not shown.
+    ...(runtime.cyclicNodeIds.length ? [{ severity: "error" as const, code: "cycle.detected", message: `${runtime.cyclicNodeIds.length} node${runtime.cyclicNodeIds.length === 1 ? " lies" : "s lie"} on a contains cycle; the tree is cut where it repeats`, path: runtime.cyclicNodeIds.slice(0, 3).join(", ") }] : []),
   ];
 
   const toggleExpanded = (id: string) => setExpanded((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const selectNode = (id: string) => {
     setSelectedId(id);
-    setExpanded((current) => { const next = new Set(current); let parent = runtime.parentByNode.get(id); while (parent) { next.add(parent); parent = runtime.parentByNode.get(parent); } return next; });
+    // The same guard upward. `parentByNode` is built from the same unvalidated
+    // relations, so a cycle made this `while` spin forever — a hang rather than
+    // a stack overflow, which is the worse of the two because nothing reports it.
+    setExpanded((current) => { const next = new Set(current); let parent = runtime.parentByNode.get(id); while (parent && !next.has(parent)) { next.add(parent); parent = runtime.parentByNode.get(parent); } return next; });
   };
   const viewportLabel = viewport === "desktop" ? "responsive desktop" : viewport === "tablet" ? "768 px" : "390 px";
 

@@ -1,4 +1,4 @@
-import { UIRRuntime, type UIRNode, type UIRPackageData } from "./runtime";
+import { UIRRuntime, type UIRNode, type UIRPackageData } from "./runtime.ts";
 
 export type SemanticDiffItem = {
   key: string;

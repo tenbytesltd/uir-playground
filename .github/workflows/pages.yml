@@ -17,12 +17,17 @@ concurrency:
 jobs:
   build:
     # Pages does not publish from a private repository on this organisation's
-    # plan, and hosted minutes are billed while it is private — so every push to
-    # the default branch would put a red deploy on a branch whose code is fine.
-    # SKIPPED rather than failed while private, and it starts working on the day
-    # visibility changes with no edit here: the same derivation `ci.yml` uses for
-    # its runner, for the same reason. A red that means "not yet" teaches readers
-    # to ignore reds.
+    # plan, so while this repository is private every push to the default branch
+    # would put a red deploy on a branch whose code is fine. SKIPPED rather than
+    # failed, and it starts working on the day visibility changes with no edit
+    # here. A red that means "not yet" teaches readers to ignore reds.
+    #
+    # This used to cite `ci.yml` as precedent for deriving from
+    # `github.event.repository.private`. It is not one any more: `ci.yml` pins
+    # `ubuntu-latest` unconditionally and argues that a runner selection able to
+    # name `self-hosted` is the wrong shape for a public repository. The two
+    # answer different questions — which machine runs a job, versus whether a
+    # deploy is possible at all — so this guard stands on its own reason.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:

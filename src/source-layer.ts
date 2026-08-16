@@ -1,5 +1,5 @@
-import { filesFromDrop, filesFromInput, loadPackageFromFiles, type FileWithPath } from "./package-loader";
-import type { PackageDiagnostic, UIRManifest, UIRPackageData } from "./runtime";
+import { filesFromDrop, filesFromInput, loadPackageFromFiles, type FileWithPath } from "./package-loader.ts";
+import type { PackageDiagnostic, UIRManifest, UIRPackageData } from "./runtime.ts";
 
 const MAX_ZIP_ENTRIES = 5000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 64 * 1024 * 1024;
@@ -163,8 +163,35 @@ export async function loadPackageFromUrl(input: string): Promise<{ pkg: UIRPacka
 
   const files: FileWithPath[] = [{ file: new File([manifestText], "package.json", { type: "application/json" }), path: "package.json" }];
   const root = new URL("./", resolved);
+  // The archive path caps entries; this one capped nothing, so a manifest
+  // declaring 20,000 shards was 20,000 sequential fetches from the visitor's
+  // browser with no way to cancel. Same limit, same reason.
+  if (manifestValue.model.length > MAX_ZIP_ENTRIES) {
+    throw new Error(`Remote manifest declares ${manifestValue.model.length} model entries; limit is ${MAX_ZIP_ENTRIES}.`);
+  }
   for (const entry of manifestValue.model) {
-    const shardUrl = new URL(entry.path, root);
+    // **`entry.path` is whatever the manifest says, and `new URL(x, root)` only
+    // stays under `root` while `x` is relative.** `looksLikeManifest` checks
+    // `Array.isArray(model)` and nothing about the entries, so
+    // `"path": "https://elsewhere.example/beacon?v=1"` discarded `root` and this
+    // loop fetched it. `credentials: "omit"` and CORS stop the RESPONSE being
+    // read; they do not stop the REQUEST being sent, and a beacon needs only the
+    // request. `?source=` is fetched on page load, so one shared link aimed every
+    // visitor's browser wherever the manifest author chose — including at hosts
+    // only that visitor's network can route to.
+    //
+    // Checked on the RESOLVED url rather than by pattern-matching the string:
+    // `./x`, `%2e%2e/x` and `/../x` all differ as text and resolve identically,
+    // and it is the resolution that decides where the fetch goes.
+    if (typeof entry.path !== "string" || !entry.path) {
+      throw new Error("Remote manifest has a model entry without a path.");
+    }
+    let shardUrl: URL;
+    try { shardUrl = new URL(entry.path, root); }
+    catch { throw new Error(`Remote manifest declares an unreadable model path: ${entry.path}`); }
+    if (!shardUrl.href.startsWith(root.href)) {
+      throw new Error(`Remote model entry leaves the package: ${entry.path}`);
+    }
     const response = await fetchChecked(shardUrl);
     const text = await response.text();
     files.push({ file: new File([text], entry.path.split("/").at(-1) || "model.json", { type: "application/json" }), path: entry.path.replace(/^\.\//, "") });

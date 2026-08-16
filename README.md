@@ -26,7 +26,9 @@ ZIP loading rejects parent-path traversal, encrypted archives, ZIP64, more than 
 
 ## Package expectations
 
-The loader looks for a UIR `package.json` manifest with `formatVersion`, `packageId`, `packageVersion`, and a `model` collection list. Model shards are loaded from the paths declared by the manifest. When a shard includes a `sha256` ledger entry, the browser verifies it with Web Crypto before the package is presented as verified.
+The loader looks for a UIR `package.json` manifest with `formatVersion`, `packageId`, `packageVersion`, and a `model` collection list. Model shards are loaded from the paths declared by the manifest, and a declared path that resolves outside the package is refused.
+
+When a shard declares a `sha256` ledger entry, the browser verifies it with Web Crypto **before the shard is loaded**: a mismatch, or a browser without Web Crypto, means the shard does not enter the package at all and Diagnostics says why. A shard that declares no ledger entry is loaded and reported as unverified — declaring nothing does not read as being sounder than declaring a hash and failing it.
 
 The Playground currently treats UIR format `1.0` as its reference format. Other versions are opened on a best-effort basis and surfaced in Diagnostics.
 

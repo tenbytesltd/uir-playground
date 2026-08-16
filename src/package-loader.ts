@@ -1,4 +1,4 @@
-import type { PackageDiagnostic, UIRManifest, UIRPackageData, UIRShard } from "./runtime";
+import type { PackageDiagnostic, UIRManifest, UIRPackageData, UIRShard } from "./runtime.ts";
 
 export type FileWithPath = { file: File; path: string };
 
@@ -93,6 +93,18 @@ export async function loadPackageFromFiles(files: FileWithPath[]): Promise<UIRPa
   }
 
   for (const entry of manifest.model) {
+    // **Validated per entry, and one bad entry costs that entry only.** Nothing
+    // checked the shape: `{"sha256": 123}` reached `.toLowerCase()` on a number
+    // and `{"path": null}` reached `.replaceAll` on null, and either TypeError
+    // propagated out of this function and reached the visitor as a raw message
+    // in the error bar, throwing the whole package away. The missing-shard
+    // branch below already had the right answer for a broken entry — a
+    // diagnostic — and this is that answer applied one step earlier.
+    if (!entry || typeof entry.collection !== "string" || typeof entry.path !== "string"
+        || (entry.sha256 !== undefined && typeof entry.sha256 !== "string")) {
+      diagnostics.push({ severity: "error", code: "model.invalid", message: "Manifest model entry is not a readable collection/path pair", path: manifestPath });
+      continue;
+    }
     const relativePath = normalizePath(entry.path).replace(/^\.\//, "");
     const expectedPath = normalizePath(`${root}${relativePath}`);
     const fileItem = files.find((item) => normalizePath(item.path) === expectedPath)
@@ -105,12 +117,31 @@ export async function loadPackageFromFiles(files: FileWithPath[]): Promise<UIRPa
       continue;
     }
 
+    // **VERIFIED FIRST, admitted second.** The shard used to be registered on
+    // the line above the ledger check, so a package whose `sha256` mismatched
+    // was parsed, rendered on the canvas, walked by the graph and used as a
+    // diff side — the only trace a red row inside a drawer that starts closed.
+    // `README.md` says the browser verifies the ledger *before the package is
+    // presented as verified*; this ordering is what makes that sentence true.
+    if (entry.sha256) {
+      const actual = await sha256(fileItem.file);
+      if (!actual) {
+        diagnostics.push({ severity: "warning", code: "hash.unavailable", message: `SHA-256 could not be verified for ${entry.collection}; the shard is not loaded.`, path: entry.path });
+        continue;
+      }
+      if (actual !== entry.sha256.toLowerCase()) {
+        diagnostics.push({ severity: "error", code: "hash.mismatch", message: `SHA-256 mismatch for ${entry.collection}; the shard is not loaded`, path: entry.path });
+        continue;
+      }
+      diagnostics.push({ severity: "success", code: "hash.verified", message: `Verified ${entry.collection}`, path: entry.path });
+    } else {
+      // A shard with no ledger entry used to produce NO diagnostic at all, so a
+      // manifest that declared nothing showed a cleaner bill of health than one
+      // that declared hashes and failed them. Declaring less must not read as
+      // being sounder.
+      diagnostics.push({ severity: "warning", code: "hash.absent", message: `${entry.collection} declares no SHA-256; it is loaded unverified`, path: entry.path });
+    }
     shards[entry.collection] = parsedShard as UIRShard;
-    if (!entry.sha256) continue;
-    const actual = await sha256(fileItem.file);
-    if (!actual) diagnostics.push({ severity: "warning", code: "hash.unavailable", message: `SHA-256 could not be verified for ${entry.collection}.`, path: entry.path });
-    else if (actual !== entry.sha256.toLowerCase()) diagnostics.push({ severity: "error", code: "hash.mismatch", message: `SHA-256 mismatch for ${entry.collection}`, path: entry.path });
-    else diagnostics.push({ severity: "success", code: "hash.verified", message: `Verified ${entry.collection}`, path: entry.path });
   }
 
   const sourceName = root.replace(/\/$/, "").split("/").at(-1) || manifest.packageId;
