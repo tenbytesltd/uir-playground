@@ -64,7 +64,11 @@ export type UIRNode = {
   salience: string;
   content: string;
   parent?: string;
-  children: string[];
+  // `readonly`, so a mutation is a compile error rather than a runtime one. The
+  // declared type is what invited the write: `factsOf` returning
+  // `readonly UIRRecord[]` makes `.sort()` fail to build, while `children:
+  // string[]` accepted it and the freeze only caught it at runtime.
+  children: readonly string[];
   controls?: string;
   href?: string;
   gap?: string;
@@ -83,6 +87,7 @@ function nodeKey(subject: string) {
 }
 
 const EMPTY: readonly UIRRecord[] = Object.freeze([]);
+const NO_CHILDREN: readonly string[] = Object.freeze([]);
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
@@ -96,7 +101,7 @@ export class UIRRuntime {
   readonly relations: UIRRecord[];
   readonly contains: UIRRecord[];
   readonly parentByNode = new Map<string, string>();
-  readonly childrenByParent = new Map<string, string[]>();
+  readonly childrenByParent = new Map<string, readonly string[]>();
   readonly controls: Map<string, string>;
   readonly gaps: UIRRecord[];
   readonly rootIds: string[];
@@ -169,10 +174,12 @@ export class UIRRuntime {
       }
     }
 
+    const childrenUnderConstruction = new Map<string, string[]>();
     for (const relation of this.contains) {
       if (!relation.source || !relation.target) continue;
-      const children = this.childrenByParent.get(relation.source) ?? [];
+      const children = childrenUnderConstruction.get(relation.source) ?? [];
       children.push(relation.target);
+      childrenUnderConstruction.set(relation.source, children);
       this.childrenByParent.set(relation.source, children);
       if (this.isNodeId(relation.source)) this.parentByNode.set(relation.target, relation.source);
     }
@@ -239,8 +246,18 @@ export class UIRRuntime {
     // Frozen rather than copied on every call: the borrow is the point, and a
     // mutation now throws at the line that attempts it instead of surfacing
     // somewhere else later.
+    //
+    // `childrenByParent` is here for the same reason and is the worse of the
+    // three, not the leftover. `node().children` hands out the live array, and
+    // `node()` is MEMOISED — so one mutation is not scoped to one render, it is
+    // the array every caller gets for the runtime's lifetime. A reorder is also
+    // silent rather than loud: `semantic-diff.ts` builds its signature from
+    // `children.map(...).join("|")`, so two identical packages would produce
+    // different signatures and every parent would report `changed`. The diff
+    // would invent changes and the counters would agree with it.
     for (const list of this.factsBySubject.values()) Object.freeze(list);
     for (const list of this.relationsBySubject.values()) Object.freeze(list);
+    for (const list of this.childrenByParent.values()) Object.freeze(list);
 
     this.cyclicNodeIds = this.findCycles();
   }
@@ -492,7 +509,7 @@ export class UIRRuntime {
       salience: this.salience(subject),
       content: this.textValue(subject),
       parent: this.parentByNode.get(subject),
-      children: this.childrenByParent.get(subject) ?? [],
+      children: this.childrenByParent.get(subject) ?? NO_CHILDREN,
       controls: controlled,
       href: controlled ? `#${nodeKey(controlled)}` : this.sourceHref(subject),
       gap: gap?.rationale,

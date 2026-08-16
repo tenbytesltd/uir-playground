@@ -190,3 +190,33 @@ test("an ascent through a cycle terminates", () => {
     assert.equal(new Set(chain).size, chain.length, `ascent from ${id} repeated an ancestor`);
   }
 });
+
+test("children are handed out frozen too, and node() hands out the same array", () => {
+  // The third array the runtime lends. Worse than the other two rather than the
+  // leftover: `node()` is memoised, so the array is not scoped to one render but
+  // is the one every caller gets for the runtime's lifetime — and a reorder is
+  // silent, because `semantic-diff` builds its signature from
+  // `children.map(...).join("|")`. Two identical packages would then produce
+  // different signatures, every parent would report `changed`, and the counters
+  // would agree with the invention.
+  const runtime = new UIRRuntime(examplePackage);
+  const parent = runtime.nodeIds.find((id) => runtime.node(id).children.length > 1);
+  assert.ok(parent, "the example has no node with two children");
+  const children = runtime.node(parent).children;
+  assert.ok(Object.isFrozen(children), "node().children is mutable");
+  assert.throws(() => children.push("x"), TypeError);
+  assert.equal(runtime.node(parent).children, children,
+    "node() is memoised, so this is the same array — which is why it must be frozen");
+  assert.ok(Object.isFrozen(runtime.childrenByParent.get(parent)));
+});
+
+test("a diff of a package against itself invents nothing", () => {
+  // The consequence the freeze protects, asserted directly rather than trusted:
+  // if anything reorders a children array in place, the child signature changes
+  // and every parent reports `changed` while the counters agree with it.
+  const diff = diffPackages(examplePackage, examplePackage);
+  assert.equal(diff.added, 0);
+  assert.equal(diff.removed, 0);
+  assert.equal(diff.changed, 0, "identical packages reported changes");
+  assert.equal(diff.same, diff.items.length);
+});
